@@ -25,12 +25,16 @@ const API_URL = process.env.IG_API_URL || 'https://api.ig.com/gateway/deal';
 // Security: Optional MCP server API key (recommended for public deployments)
 const MCP_SERVER_API_KEY = process.env.MCP_SERVER_API_KEY || '';
 const REQUIRE_ENV_CREDENTIALS = process.env.REQUIRE_ENV_CREDENTIALS === 'true';
+const REQUIRE_AUTHENTICATION = process.env.REQUIRE_AUTHENTICATION !== 'false'; // Default: true for security
 
 // Security: Log warning if credentials are not set via environment (for production)
 if (REQUIRE_ENV_CREDENTIALS && (!API_KEY || !USERNAME || !PASSWORD)) {
   console.error('SECURITY WARNING: REQUIRE_ENV_CREDENTIALS is enabled but credentials are missing!');
   console.error('Set IG_API_KEY, IG_USERNAME, and IG_PASSWORD environment variables.');
 }
+
+// Security: Track authenticated connections
+const authenticatedConnections = new Set<string>();
 
 // Global client instance (will be created per connection)
 const clients = new Map<string, IGClient>();
@@ -87,6 +91,20 @@ function formatResponse(data: unknown, userMessage?: string, debug?: unknown): u
  * Define MCP tools
  */
 const tools: Tool[] = [
+  {
+    name: 'mcp_authenticate',
+    description: 'Authenticate with the MCP server using an API key. Required before using other tools if MCP_SERVER_API_KEY is set. This prevents unauthorized access to your IG account.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        apiKey: {
+          type: 'string',
+          description: 'MCP Server API Key (from MCP_SERVER_API_KEY environment variable)',
+        },
+      },
+      required: ['apiKey'],
+    },
+  },
   {
     name: 'ig_login',
     description: 'Authenticate with IG.com API. Provide your username, password, and API key. If credentials are set via environment variables, you can call this without parameters.',
@@ -438,6 +456,30 @@ function validateApiKey(apiKey?: string): boolean {
 }
 
 /**
+ * Check if connection is authenticated
+ */
+function isConnectionAuthenticated(connectionId: string): boolean {
+  if (!REQUIRE_AUTHENTICATION || !MCP_SERVER_API_KEY) {
+    return true; // No authentication required
+  }
+  return authenticatedConnections.has(connectionId);
+}
+
+/**
+ * Authenticate a connection
+ */
+function authenticateConnection(connectionId: string, apiKey?: string): boolean {
+  if (!REQUIRE_AUTHENTICATION || !MCP_SERVER_API_KEY) {
+    return true; // No authentication required
+  }
+  if (validateApiKey(apiKey)) {
+    authenticatedConnections.add(connectionId);
+    return true;
+  }
+  return false;
+}
+
+/**
  * Check if credentials should be allowed via tool call
  */
 function allowToolCredentials(): boolean {
@@ -452,30 +494,94 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const connectionId = currentConnectionId;
   const client = getClient(connectionId);
 
-  // Security: Validate API key if required (for public deployments)
-  const providedApiKey = (request as any).meta?.apiKey || (args as any)?.mcpApiKey;
-  if (MCP_SERVER_API_KEY && !validateApiKey(providedApiKey)) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(
-            formatResponse(
-              null,
-              'Unauthorized: Invalid or missing MCP server API key. Please configure MCP_SERVER_API_KEY.',
-              null
-            ),
-            null,
-            2
-          ),
-        },
-      ],
-      isError: true,
-    };
-  }
-
   try {
+    // Security: Check if authentication is required for this connection
+    if (!isConnectionAuthenticated(connectionId) && name !== 'mcp_authenticate') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              formatResponse(
+                null,
+                `Unauthorized: Connection not authenticated. Please call 'mcp_authenticate' first with your MCP_SERVER_API_KEY. This prevents unauthorized access to your IG account.`,
+                { 
+                  securityPolicy: 'Authentication required',
+                  requiresAuthentication: REQUIRE_AUTHENTICATION,
+                  apiKeyRequired: !!MCP_SERVER_API_KEY 
+                }
+              ),
+              null,
+              2
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+
     switch (name) {
+      case 'mcp_authenticate': {
+        const providedApiKey = (args?.apiKey as string) || '';
+        
+        if (!MCP_SERVER_API_KEY) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  formatResponse(
+                    { authenticated: true },
+                    'No API key required. Server is open for connections.',
+                    null
+                  ),
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: false,
+          };
+        }
+
+        if (authenticateConnection(connectionId, providedApiKey)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  formatResponse(
+                    { authenticated: true, connectionId },
+                    'Successfully authenticated with MCP server. You can now use IG API tools.',
+                    null
+                  ),
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: false,
+          };
+        } else {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  formatResponse(
+                    null,
+                    'Authentication failed: Invalid API key. Please provide the correct MCP_SERVER_API_KEY.',
+                    { authenticated: false }
+                  ),
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
       case 'ig_login': {
         // Security: Check if credentials via tool are allowed
         const credentialsFromTool = !!(args?.username || args?.password || args?.apiKey);

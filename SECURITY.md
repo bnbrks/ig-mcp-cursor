@@ -18,7 +18,30 @@ For **publicly accessible** MCP servers (e.g., deployed on Railway), you should:
 
 ## 🔒 Security Features
 
-### 1. Environment-Only Credentials
+### 1. Endpoint Authentication (CRITICAL for Public Deployments)
+
+**⚠️ IMPORTANT**: For publicly accessible servers (Railway, etc.), you MUST set `MCP_SERVER_API_KEY` to prevent unauthorized access to your IG account.
+
+```bash
+export MCP_SERVER_API_KEY=your_secure_random_key_here
+export REQUIRE_AUTHENTICATION=true  # Default: true
+```
+
+**How it works:**
+- Users must call `mcp_authenticate` tool first with the API key
+- Only authenticated connections can use IG API tools
+- Prevents unauthorized access to your IG account
+
+**Generate a secure key:**
+```bash
+openssl rand -hex 32
+```
+
+**In ChatGPT/MCP client:**
+1. First call: `mcp_authenticate` with `apiKey: "your_MCP_SERVER_API_KEY"`
+2. Then use other tools like `ig_login`, `ig_get_accounts`, etc.
+
+### 2. Environment-Only Credentials
 
 Enable strict mode where credentials can only be set via environment variables:
 
@@ -31,19 +54,25 @@ export IG_PASSWORD=your_password
 
 When enabled, the `ig_login` tool will reject credentials passed directly and only use environment variables.
 
-### 2. MCP Server API Key
+### 3. Network-Level Security (Railway)
 
-Add an additional layer of security by requiring an API key to access the MCP server:
+**MCP servers typically use stdio (standard input/output)**, which means they're accessed via the local machine, not HTTP. However, if your deployment exposes endpoints:
 
-```bash
-export MCP_SERVER_API_KEY=your_secure_random_key_here
-```
+1. **Private Networking**: Use Railway Private Networking to restrict access
+2. **IP Whitelisting**: Configure Railway to only accept connections from specific IPs
+3. **VPN Access**: Connect to Railway through a VPN
+4. **Service Isolation**: Deploy in a private network segment
 
-When set, all tool calls must include this API key. You can generate a secure key with:
+**For stdio-based MCP servers** (most common):
+- The server runs locally and communicates via stdin/stdout
+- Network security is handled by the host machine
+- **Still requires `MCP_SERVER_API_KEY`** to prevent unauthorized tool usage
 
-```bash
-openssl rand -hex 32
-```
+**For HTTP-based MCP servers** (if implemented):
+- Add bearer token authentication
+- Use HTTPS only
+- Implement rate limiting
+- Add CORS restrictions
 
 ### 3. Session Isolation
 
@@ -83,10 +112,26 @@ Set these in your Railway project settings:
    - Go to Variables tab
    - Add each variable as a secret
    - Never commit these to your repository
+   
+   **REQUIRED for public deployments:**
+   ```
+   MCP_SERVER_API_KEY=your_secure_random_key  # Generate with: openssl rand -hex 32
+   REQUIRE_AUTHENTICATION=true
+   REQUIRE_ENV_CREDENTIALS=true
+   IG_API_KEY=your_ig_api_key
+   IG_USERNAME=your_ig_username
+   IG_PASSWORD=your_ig_password
+   ```
 
-4. **Enable Private Deployments** (if available):
-   - Use Railway's private networking features
-   - Restrict access to specific IPs/networks if possible
+4. **Network Security** (Recommended):
+   - Use Railway Private Networking if available
+   - Configure IP whitelisting if possible
+   - Use Railway's built-in authentication features
+
+5. **Additional Railway Security**:
+   - Enable Railway's firewall rules
+   - Use Railway's authentication proxy
+   - Configure service-to-service authentication
 
 ## 🔐 Local Development Security
 
@@ -104,14 +149,21 @@ For local development:
 
 ## 📋 Security Checklist
 
-- [ ] All credentials stored as environment variables
+### Required for Public Deployments:
+- [ ] `MCP_SERVER_API_KEY` set (generate with `openssl rand -hex 32`)
+- [ ] `REQUIRE_AUTHENTICATION=true` (default, prevents unauthorized access)
+- [ ] `REQUIRE_ENV_CREDENTIALS=true` (prevents credential leakage)
+- [ ] All IG credentials stored as Railway secrets (not in code)
+- [ ] Test authentication: Call `mcp_authenticate` before other tools
+
+### Recommended:
 - [ ] `.env` file is in `.gitignore`
-- [ ] `REQUIRE_ENV_CREDENTIALS=true` for production
-- [ ] `MCP_SERVER_API_KEY` set for public deployments
-- [ ] Railway secrets configured (not in code)
 - [ ] Different credentials for dev/prod
+- [ ] Railway private networking enabled (if available)
+- [ ] IP whitelisting configured (if possible)
 - [ ] Regular credential rotation
 - [ ] Monitor access logs
+- [ ] Set up alerts for failed authentication attempts
 
 ## 🛡️ Additional Security Measures
 
