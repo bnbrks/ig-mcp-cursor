@@ -12,6 +12,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import { createServer } from 'http';
 import { IGClient } from './ig-client.js';
 import { SessionManager } from './session-manager.js';
 import type { IGCredentials, IGSession } from './types.js';
@@ -1350,13 +1351,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 /**
+ * Start HTTP health check server (for Railway/deployment platforms)
+ * This keeps the service alive but MCP communication is via stdio
+ */
+function startHealthCheckServer() {
+  const port = process.env.PORT || 3000;
+  const healthServer = createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'ok',
+        service: 'ig-mcp-server',
+        transport: 'stdio',
+        note: 'MCP server communicates via stdin/stdout, not HTTP. This is a health check endpoint.',
+      }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    }
+  });
+
+  healthServer.listen(port, () => {
+    console.error(`Health check server listening on port ${port} (for Railway/deployment health checks)`);
+  });
+
+  healthServer.on('error', (error) => {
+    console.error('Health check server error:', error);
+  });
+}
+
+/**
  * Start the server
  */
 async function main() {
+  // Start health check HTTP server for Railway/deployment platforms
+  // Note: MCP communication is via stdio, not HTTP
+  startHealthCheckServer();
+
+  // Start MCP server on stdio
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   console.error('IG MCP Server running on stdio');
+  console.error('Note: MCP servers communicate via stdin/stdout, not HTTP ports');
 }
 
 main().catch((error) => {

@@ -184,6 +184,12 @@ docker build -t ig-mcp-server .
 docker run --env-file .env ig-mcp-server
 ```
 
+## Railway Deployment Notes
+
+⚠️ **Important**: MCP servers communicate via **stdio (stdin/stdout)**, NOT HTTP. Railway deployment is primarily for keeping the service running. The agent connects locally through an MCP client, not via HTTP endpoints.
+
+**See [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for detailed Railway deployment guide.**
+
 ## Security Considerations
 
 ⚠️ **Important Security Notes**:
