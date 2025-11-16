@@ -1537,65 +1537,90 @@ function startHTTPServer() {
     res.end(JSON.stringify({ error: 'Not found' }));
   });
 
-  httpServer.listen(port, '0.0.0.0', () => {
-    console.error(`IG MCP Server running on HTTP port ${port}`);
-    console.error(`MCP endpoint: http://0.0.0.0:${port}/mcp`);
-    console.error(`Health check: http://0.0.0.0:${port}/health`);
-  });
+  return new Promise((resolve, reject) => {
+    httpServer.listen(port, '0.0.0.0', () => {
+      console.error(`IG MCP Server running on HTTP port ${port}`);
+      console.error(`MCP endpoint: http://0.0.0.0:${port}/mcp`);
+      console.error(`Health check: http://0.0.0.0:${port}/health`);
+      resolve(httpServer);
+    });
 
-  httpServer.on('error', (error) => {
-    console.error('HTTP server error:', error);
+    httpServer.on('error', (error) => {
+      console.error('HTTP server error:', error);
+      reject(error);
+    });
   });
-
-  return httpServer;
 }
 
 /**
  * Start the server
  */
 async function main() {
-  // Start HTTP server with MCP endpoint support
-  const httpServer = startHTTPServer();
+  try {
+    // Start HTTP server with MCP endpoint support and wait for it to be ready
+    const httpServer = await startHTTPServer();
 
-  // Only start stdio transport if stdin is available (local development)
-  // In Railway/production environments, stdin may not be available, so skip stdio
-  if (process.stdin.isTTY) {
-    try {
-      const transport = new StdioServerTransport();
-      await server.connect(transport);
-      console.error('IG MCP Server running on both HTTP and stdio');
-    } catch (error) {
-      // If stdio connection fails, that's ok for HTTP-only mode
-      console.error('Note: stdio transport not available, HTTP transport only');
+    // Only start stdio transport if stdin is available (local development)
+    // In Railway/production environments, stdin may not be available, so skip stdio
+    if (process.stdin.isTTY) {
+      try {
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        console.error('IG MCP Server running on both HTTP and stdio');
+      } catch (error) {
+        // If stdio connection fails, that's ok for HTTP-only mode
+        console.error('Note: stdio transport not available, HTTP transport only');
+      }
+    } else {
+      console.error('IG MCP Server running on HTTP only (no stdio available)');
     }
-  } else {
-    console.error('IG MCP Server running on HTTP only (no stdio available)');
+
+    // Handle server errors gracefully
+    httpServer.on('error', (error) => {
+      console.error('HTTP server error:', error);
+    });
+
+    // Prevent process from exiting - handle graceful shutdown
+    process.on('SIGTERM', () => {
+      console.error('Received SIGTERM, shutting down gracefully...');
+      httpServer.close(() => {
+        console.error('HTTP server closed');
+        process.exit(0);
+      });
+    });
+
+    process.on('SIGINT', () => {
+      console.error('Received SIGINT, shutting down gracefully...');
+      httpServer.close(() => {
+        console.error('HTTP server closed');
+        process.exit(0);
+      });
+    });
+
+    // Keep process alive - prevent exit
+    // The HTTP server should keep the event loop alive, but let's be explicit
+    const keepAlive = setInterval(() => {
+      // This interval keeps the process alive
+      // It's a fallback in case something else tries to exit
+    }, 10000); // Every 10 seconds
+
+    // Log that we're ready
+    console.error('Server started successfully, waiting for requests...');
+    console.error('Process will stay alive as long as HTTP server is running');
+
+    // Ensure we don't exit
+    process.on('beforeExit', (code) => {
+      console.error(`Process about to exit with code ${code}`);
+      clearInterval(keepAlive);
+    });
+
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack);
+    }
+    process.exit(1);
   }
-
-  // Keep the process alive - handle server errors gracefully
-  httpServer.on('error', (error) => {
-    console.error('HTTP server error:', error);
-  });
-
-  // Prevent process from exiting
-  process.on('SIGTERM', () => {
-    console.error('Received SIGTERM, shutting down gracefully...');
-    httpServer.close(() => {
-      console.error('HTTP server closed');
-      process.exit(0);
-    });
-  });
-
-  process.on('SIGINT', () => {
-    console.error('Received SIGINT, shutting down gracefully...');
-    httpServer.close(() => {
-      console.error('HTTP server closed');
-      process.exit(0);
-    });
-  });
-
-  // Keep process alive
-  console.error('Server started successfully, waiting for requests...');
 }
 
 main().catch((error) => {
