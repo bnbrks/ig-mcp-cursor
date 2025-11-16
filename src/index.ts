@@ -12,7 +12,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { createServer, Server } from 'http';
+import { createServer, Server as HttpServer } from 'http';
 import { IGClient } from './ig-client.js';
 import { SessionManager } from './session-manager.js';
 import type { IGCredentials, IGSession } from './types.js';
@@ -1457,7 +1457,7 @@ async function handleMCPRequest(body: string): Promise<unknown> {
 /**
  * Start HTTP server with MCP endpoint support
  */
-function startHTTPServer(): Promise<Server> {
+function startHTTPServer(): Promise<HttpServer> {
   const port = parseInt(process.env.PORT || '3000', 10);
   
   const httpServer = createServer(async (req, res) => {
