@@ -94,7 +94,7 @@ export class IGClient {
         userMessage: 'Successfully authenticated with IG API',
       };
     } catch (error) {
-      return this.handleError(error, 'Authentication failed');
+      return this.handleError<IGSession>(error, 'Authentication failed');
     }
   }
 
@@ -123,7 +123,7 @@ export class IGClient {
         userMessage: 'Account information retrieved successfully',
       };
     } catch (error) {
-      return this.handleError(error, 'Failed to retrieve account information');
+      return this.handleError<AccountInfo[]>(error, 'Failed to retrieve account information');
     }
   }
 
@@ -142,7 +142,7 @@ export class IGClient {
         userMessage: `Account balance for ${accountId} retrieved successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to retrieve balance for account ${accountId}`);
+      return this.handleError<AccountInfo>(error, `Failed to retrieve balance for account ${accountId}`);
     }
   }
 
@@ -161,7 +161,7 @@ export class IGClient {
         userMessage: 'Positions retrieved successfully',
       };
     } catch (error) {
-      return this.handleError(error, 'Failed to retrieve positions');
+      return this.handleError<Position[]>(error, 'Failed to retrieve positions');
     }
   }
 
@@ -184,7 +184,7 @@ export class IGClient {
         userMessage: 'Open positions retrieved successfully',
       };
     } catch (error) {
-      return this.handleError(error, 'Failed to retrieve open positions');
+      return this.handleError<Position[]>(error, 'Failed to retrieve open positions');
     }
   }
 
@@ -213,7 +213,7 @@ export class IGClient {
         userMessage: `Position ${dealId} closed successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to close position ${dealId}`);
+      return this.handleError<unknown>(error, `Failed to close position ${dealId}`);
     }
   }
 
@@ -258,7 +258,7 @@ export class IGClient {
         userMessage: `Order placed successfully. Deal reference: ${response.data.dealReference || 'N/A'}`,
       };
     } catch (error) {
-      return this.handleError(error, 'Failed to place order');
+      return this.handleError<unknown>(error, 'Failed to place order');
     }
   }
 
@@ -277,7 +277,7 @@ export class IGClient {
         userMessage: 'Working orders retrieved successfully',
       };
     } catch (error) {
-      return this.handleError(error, 'Failed to retrieve working orders');
+      return this.handleError<Order[]>(error, 'Failed to retrieve working orders');
     }
   }
 
@@ -296,7 +296,7 @@ export class IGClient {
         userMessage: `Working order ${dealId} deleted successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to delete working order ${dealId}`);
+      return this.handleError<unknown>(error, `Failed to delete working order ${dealId}`);
     }
   }
 
@@ -315,7 +315,7 @@ export class IGClient {
         userMessage: `Market data for ${epic} retrieved successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to retrieve market data for ${epic}`);
+      return this.handleError<MarketData>(error, `Failed to retrieve market data for ${epic}`);
     }
   }
 
@@ -337,7 +337,7 @@ export class IGClient {
         userMessage: `Search results for "${searchTerm}" retrieved successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to search for instruments matching "${searchTerm}"`);
+      return this.handleError<unknown>(error, `Failed to search for instruments matching "${searchTerm}"`);
     }
   }
 
@@ -365,7 +365,7 @@ export class IGClient {
         userMessage: `Historical prices for ${epic} retrieved successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to retrieve historical prices for ${epic}`);
+      return this.handleError<{ prices: HistoricalPrice[] }>(error, `Failed to retrieve historical prices for ${epic}`);
     }
   }
 
@@ -384,7 +384,7 @@ export class IGClient {
         userMessage: 'Watchlists retrieved successfully',
       };
     } catch (error) {
-      return this.handleError(error, 'Failed to retrieve watchlists');
+      return this.handleError<unknown>(error, 'Failed to retrieve watchlists');
     }
   }
 
@@ -403,7 +403,7 @@ export class IGClient {
         userMessage: `Watchlist ${watchlistId} markets retrieved successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to retrieve watchlist ${watchlistId} markets`);
+      return this.handleError<unknown>(error, `Failed to retrieve watchlist ${watchlistId} markets`);
     }
   }
 
@@ -441,14 +441,14 @@ export class IGClient {
         userMessage: `API call to ${endpoint} completed successfully`,
       };
     } catch (error) {
-      return this.handleError(error, `Failed to call API endpoint: ${endpoint}`);
+      return this.handleError<unknown>(error, `Failed to call API endpoint: ${endpoint}`);
     }
   }
 
   /**
    * Handle API errors and format responses
    */
-  private handleError(error: unknown, userMessage: string): IGResponse {
+  private handleError<T = unknown>(error: unknown, userMessage: string): IGResponse<T> {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<{ errorCode: string; errorMessage: string }>;
       const status = axiosError.response?.status;
