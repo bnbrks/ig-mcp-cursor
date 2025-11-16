@@ -1557,15 +1557,19 @@ async function main() {
   // Start HTTP server with MCP endpoint support
   startHTTPServer();
 
-  // Also support stdio for local connections (optional)
-  // This allows the server to work both via HTTP and stdio
-  try {
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error('IG MCP Server running on both HTTP and stdio');
-  } catch (error) {
-    // If stdio connection fails (e.g., no stdin available), that's ok for HTTP-only mode
-    console.error('Note: stdio transport not available, HTTP transport only');
+  // Only start stdio transport if stdin is available (local development)
+  // In Railway/production environments, stdin may not be available, so skip stdio
+  if (process.stdin.isTTY) {
+    try {
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+      console.error('IG MCP Server running on both HTTP and stdio');
+    } catch (error) {
+      // If stdio connection fails, that's ok for HTTP-only mode
+      console.error('Note: stdio transport not available, HTTP transport only');
+    }
+  } else {
+    console.error('IG MCP Server running on HTTP only (no stdio available)');
   }
 }
 
