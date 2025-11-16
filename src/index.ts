@@ -1461,6 +1461,9 @@ function startHTTPServer(): Promise<HttpServer> {
   const port = parseInt(process.env.PORT || '3000', 10);
   
   const httpServer = createServer(async (req, res) => {
+    // Log all incoming requests for debugging
+    console.error(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${req.headers['user-agent'] || 'unknown'}`);
+    
     // CORS headers
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
@@ -1470,6 +1473,7 @@ function startHTTPServer(): Promise<HttpServer> {
 
     // Handle OPTIONS requests
     if (req.method === 'OPTIONS') {
+      console.error(`[${new Date().toISOString()}] Handling OPTIONS request`);
       res.writeHead(200, corsHeaders);
       res.end();
       return;
@@ -1477,6 +1481,7 @@ function startHTTPServer(): Promise<HttpServer> {
 
     // Health check endpoint
     if ((req.url === '/health' || req.url === '/') && req.method === 'GET') {
+      console.error(`[${new Date().toISOString()}] Handling health check request`);
       res.writeHead(200, { 
         'Content-Type': 'application/json',
         ...corsHeaders 
@@ -1488,6 +1493,7 @@ function startHTTPServer(): Promise<HttpServer> {
         endpoint: '/mcp',
         note: 'MCP server communicates via HTTP POST at /mcp endpoint',
       }));
+      console.error(`[${new Date().toISOString()}] Health check response sent`);
       return;
     }
 
