@@ -1623,8 +1623,23 @@ async function main() {
   }
 }
 
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Error stack:', error.stack);
+  process.exit(1);
+});
+
+// Start the server
+console.error('Starting IG MCP Server...');
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error('Fatal error in main():', error);
   if (error instanceof Error) {
     console.error('Error stack:', error.stack);
   }
