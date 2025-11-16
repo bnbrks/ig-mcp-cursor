@@ -34,6 +34,7 @@ export interface IGResponse<T = unknown> {
     statusText?: string;
     response?: unknown;
     request?: unknown;
+    error?: unknown;
   };
   userMessage?: string;
 }

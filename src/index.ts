@@ -61,11 +61,16 @@ function ensureAuthenticated(connectionId: string): string | null {
  * Format response for MCP
  */
 function formatResponse(data: unknown, userMessage?: string, debug?: unknown): unknown {
-  return {
+  const result: Record<string, unknown> = {
     message: userMessage || 'Operation completed successfully',
     data,
-    ...(debug && { debug }),
   };
+  
+  if (debug && typeof debug === 'object') {
+    result.debug = debug;
+  }
+  
+  return result;
 }
 
 /**
@@ -790,7 +795,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           size: args?.size as number,
           orderType: args?.orderType as 'MARKET' | 'LIMIT' | 'STOP' | undefined,
           level: args?.level as number | undefined,
-          timeInForce: args?.timeInForce as string | undefined,
+          timeInForce: args?.timeInForce as 'EXECUTE_AND_ELIMINATE' | 'FILL_OR_KILL' | 'GOOD_TILL_CANCELLED' | 'GOOD_TILL_DATE' | undefined,
           goodTillDate: args?.goodTillDate as string | undefined,
           guaranteedStop: args?.guaranteedStop as boolean | undefined,
           stopLevel: args?.stopLevel as number | undefined,
