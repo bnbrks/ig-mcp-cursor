@@ -22,6 +22,16 @@ const USERNAME = process.env.IG_USERNAME || '';
 const PASSWORD = process.env.IG_PASSWORD || '';
 const API_URL = process.env.IG_API_URL || 'https://api.ig.com/gateway/deal';
 
+// Security: Optional MCP server API key (recommended for public deployments)
+const MCP_SERVER_API_KEY = process.env.MCP_SERVER_API_KEY || '';
+const REQUIRE_ENV_CREDENTIALS = process.env.REQUIRE_ENV_CREDENTIALS === 'true';
+
+// Security: Log warning if credentials are not set via environment (for production)
+if (REQUIRE_ENV_CREDENTIALS && (!API_KEY || !USERNAME || !PASSWORD)) {
+  console.error('SECURITY WARNING: REQUIRE_ENV_CREDENTIALS is enabled but credentials are missing!');
+  console.error('Set IG_API_KEY, IG_USERNAME, and IG_PASSWORD environment variables.');
+}
+
 // Global client instance (will be created per connection)
 const clients = new Map<string, IGClient>();
 
@@ -418,6 +428,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 /**
+ * Validate MCP server API key if required
+ */
+function validateApiKey(apiKey?: string): boolean {
+  if (!MCP_SERVER_API_KEY) {
+    return true; // No API key required
+  }
+  return apiKey === MCP_SERVER_API_KEY;
+}
+
+/**
+ * Check if credentials should be allowed via tool call
+ */
+function allowToolCredentials(): boolean {
+  return !REQUIRE_ENV_CREDENTIALS;
+}
+
+/**
  * Handle tool calls
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -425,9 +452,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const connectionId = currentConnectionId;
   const client = getClient(connectionId);
 
+  // Security: Validate API key if required (for public deployments)
+  const providedApiKey = (request as any).meta?.apiKey || (args as any)?.mcpApiKey;
+  if (MCP_SERVER_API_KEY && !validateApiKey(providedApiKey)) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            formatResponse(
+              null,
+              'Unauthorized: Invalid or missing MCP server API key. Please configure MCP_SERVER_API_KEY.',
+              null
+            ),
+            null,
+            2
+          ),
+        },
+      ],
+      isError: true,
+    };
+  }
+
   try {
     switch (name) {
       case 'ig_login': {
+        // Security: Check if credentials via tool are allowed
+        const credentialsFromTool = !!(args?.username || args?.password || args?.apiKey);
+        
+        if (REQUIRE_ENV_CREDENTIALS && credentialsFromTool) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  formatResponse(
+                    null,
+                    'SECURITY: This server requires credentials to be set via environment variables only. Credentials cannot be passed through tool calls. Set IG_USERNAME, IG_PASSWORD, and IG_API_KEY as environment variables.',
+                    { securityPolicy: 'REQUIRE_ENV_CREDENTIALS is enabled' }
+                  ),
+                  null,
+                  2
+                ),
+              },
+            ],
+            isError: true,
+          };
+        }
+
         // Use provided credentials or fall back to environment variables
         const credentials: IGCredentials = {
           username: (args?.username as string) || USERNAME,
@@ -444,7 +516,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                   formatResponse(
                     null,
                     'Missing credentials. Please provide username, password, and apiKey, or set them via environment variables (IG_USERNAME, IG_PASSWORD, IG_API_KEY).',
-                    { provided: args, envVarsSet: { username: !!USERNAME, password: !!PASSWORD, apiKey: !!API_KEY } }
+                    { 
+                      provided: { 
+                        username: !!args?.username, 
+                        password: !!args?.password, 
+                        apiKey: !!args?.apiKey 
+                      }, 
+                      envVarsSet: { 
+                        username: !!USERNAME, 
+                        password: !!PASSWORD, 
+                        apiKey: !!API_KEY 
+                      },
+                      requireEnvCredentials: REQUIRE_ENV_CREDENTIALS
+                    }
                   ),
                   null,
                   2
@@ -453,6 +537,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             ],
             isError: true,
           };
+        }
+
+        // Security warning if credentials are provided via tool (not recommended)
+        if (credentialsFromTool && !REQUIRE_ENV_CREDENTIALS) {
+          console.error('SECURITY WARNING: Credentials provided via tool call. Consider using environment variables instead.');
         }
 
         // Update client with provided API key if different

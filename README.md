@@ -199,6 +199,20 @@ docker run --env-file .env ig-mcp-server
 
 4. **API Keys**: Rotate API keys regularly and use read-only keys when possible for non-trading operations.
 
+### 🔒 Production Security Settings
+
+For **publicly accessible deployments** (like Railway), enable strict security:
+
+```bash
+# Require credentials via environment variables only (no tool calls)
+REQUIRE_ENV_CREDENTIALS=true
+
+# Add MCP server API key for access control
+MCP_SERVER_API_KEY=your_secure_random_key
+```
+
+**See [SECURITY.md](SECURITY.md) for comprehensive security guide.**
+
 ## API Reference
 
 ### IG.com API Documentation
