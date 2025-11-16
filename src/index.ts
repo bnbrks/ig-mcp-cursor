@@ -12,7 +12,7 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { createServer } from 'http';
+import { createServer, Server } from 'http';
 import { IGClient } from './ig-client.js';
 import { SessionManager } from './session-manager.js';
 import type { IGCredentials, IGSession } from './types.js';
@@ -1457,7 +1457,7 @@ async function handleMCPRequest(body: string): Promise<unknown> {
 /**
  * Start HTTP server with MCP endpoint support
  */
-function startHTTPServer() {
+function startHTTPServer(): Promise<Server> {
   const port = parseInt(process.env.PORT || '3000', 10);
   
   const httpServer = createServer(async (req, res) => {
@@ -1545,7 +1545,7 @@ function startHTTPServer() {
       resolve(httpServer);
     });
 
-    httpServer.on('error', (error) => {
+    httpServer.on('error', (error: Error) => {
       console.error('HTTP server error:', error);
       reject(error);
     });
@@ -1576,7 +1576,7 @@ async function main() {
     }
 
     // Handle server errors gracefully
-    httpServer.on('error', (error) => {
+    httpServer.on('error', (error: Error) => {
       console.error('HTTP server error:', error);
     });
 
