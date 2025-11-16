@@ -1460,8 +1460,6 @@ async function handleMCPRequest(body: string): Promise<unknown> {
 function startHTTPServer() {
   const port = parseInt(process.env.PORT || '3000', 10);
   
-  console.error(`Starting HTTP server on port ${port}...`);
-  
   const httpServer = createServer(async (req, res) => {
     // CORS headers
     const corsHeaders = {
@@ -1540,14 +1538,13 @@ function startHTTPServer() {
   });
 
   httpServer.listen(port, '0.0.0.0', () => {
-    console.error(`✓ IG MCP Server running on HTTP port ${port}`);
-    console.error(`✓ MCP endpoint: http://0.0.0.0:${port}/mcp`);
-    console.error(`✓ Health check: http://0.0.0.0:${port}/health`);
+    console.error(`IG MCP Server running on HTTP port ${port}`);
+    console.error(`MCP endpoint: http://0.0.0.0:${port}/mcp`);
+    console.error(`Health check: http://0.0.0.0:${port}/health`);
   });
 
   httpServer.on('error', (error) => {
-    console.error('✗ HTTP server error:', error);
-    process.exit(1);
+    console.error('HTTP server error:', error);
   });
 
   return httpServer;
@@ -1557,29 +1554,22 @@ function startHTTPServer() {
  * Start the server
  */
 async function main() {
-  try {
-    console.error('Starting IG MCP Server...');
-    
-    // Start HTTP server with MCP endpoint support
-    startHTTPServer();
+  // Start HTTP server with MCP endpoint support
+  startHTTPServer();
 
-    // Only start stdio transport if stdin is available (local development)
-    // In Railway/production environments, stdin may not be available, so skip stdio
-    if (process.stdin.isTTY) {
-      try {
-        const transport = new StdioServerTransport();
-        await server.connect(transport);
-        console.error('IG MCP Server running on both HTTP and stdio');
-      } catch (error) {
-        // If stdio connection fails, that's ok for HTTP-only mode
-        console.error('Note: stdio transport not available, HTTP transport only');
-      }
-    } else {
-      console.error('IG MCP Server running on HTTP only (no stdio available)');
+  // Only start stdio transport if stdin is available (local development)
+  // In Railway/production environments, stdin may not be available, so skip stdio
+  if (process.stdin.isTTY) {
+    try {
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+      console.error('IG MCP Server running on both HTTP and stdio');
+    } catch (error) {
+      // If stdio connection fails, that's ok for HTTP-only mode
+      console.error('Note: stdio transport not available, HTTP transport only');
     }
-  } catch (error) {
-    console.error('Error during server startup:', error);
-    throw error;
+  } else {
+    console.error('IG MCP Server running on HTTP only (no stdio available)');
   }
 }
 
