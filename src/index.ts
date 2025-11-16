@@ -1555,7 +1555,7 @@ function startHTTPServer() {
  */
 async function main() {
   // Start HTTP server with MCP endpoint support
-  startHTTPServer();
+  const httpServer = startHTTPServer();
 
   // Only start stdio transport if stdin is available (local development)
   // In Railway/production environments, stdin may not be available, so skip stdio
@@ -1571,10 +1571,38 @@ async function main() {
   } else {
     console.error('IG MCP Server running on HTTP only (no stdio available)');
   }
+
+  // Keep the process alive - handle server errors gracefully
+  httpServer.on('error', (error) => {
+    console.error('HTTP server error:', error);
+  });
+
+  // Prevent process from exiting
+  process.on('SIGTERM', () => {
+    console.error('Received SIGTERM, shutting down gracefully...');
+    httpServer.close(() => {
+      console.error('HTTP server closed');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
+    console.error('Received SIGINT, shutting down gracefully...');
+    httpServer.close(() => {
+      console.error('HTTP server closed');
+      process.exit(0);
+    });
+  });
+
+  // Keep process alive
+  console.error('Server started successfully, waiting for requests...');
 }
 
 main().catch((error) => {
   console.error('Fatal error:', error);
+  if (error instanceof Error) {
+    console.error('Error stack:', error.stack);
+  }
   process.exit(1);
 });
 
