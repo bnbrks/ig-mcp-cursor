@@ -488,10 +488,9 @@ function allowToolCredentials(): boolean {
 }
 
 /**
- * Handle tool calls
+ * Shared tool call handler logic (used by both stdio and HTTP transports)
  */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+async function executeToolCall(name: string, args?: Record<string, unknown>) {
   const connectionId = currentConnectionId;
   const client = getClient(connectionId);
 
@@ -1348,52 +1347,226 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   }
+}
+
+/**
+ * Register stdio transport handler (calls shared executeToolCall function)
+ */
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  return executeToolCall(name, args);
 });
 
 /**
- * Start HTTP health check server (for Railway/deployment platforms)
- * This keeps the service alive but MCP communication is via stdio
+ * Handle tools/list request (used by HTTP transport)
  */
-function startHealthCheckServer() {
+async function handleListTools(): Promise<{ tools: Tool[] }> {
+  return { tools };
+}
+
+/**
+ * Handle tools/call request (used by HTTP transport)
+ */
+async function handleCallTool(name: string, args?: Record<string, unknown>) {
+  return executeToolCall(name, args);
+}
+
+/**
+ * Handle MCP JSON-RPC request over HTTP
+ */
+async function handleMCPRequest(body: string): Promise<unknown> {
+  try {
+    const request = JSON.parse(body);
+
+    // Validate JSON-RPC format
+    if (request.jsonrpc !== '2.0') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id || null,
+        error: {
+          code: -32600,
+          message: 'Invalid Request: jsonrpc must be "2.0"',
+        },
+      };
+    }
+
+    // Handle tools/list
+    if (request.method === 'tools/list') {
+      const result = await handleListTools();
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result,
+      };
+    }
+
+    // Handle tools/call
+    if (request.method === 'tools/call') {
+      const result = await handleCallTool(
+        request.params.name,
+        request.params.arguments || {}
+      );
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result,
+      };
+    }
+
+    // Handle initialize
+    if (request.method === 'initialize') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: {},
+          },
+          serverInfo: {
+            name: 'ig-mcp-server',
+            version: '1.0.0',
+          },
+        },
+      };
+    }
+
+    // Unknown method
+    return {
+      jsonrpc: '2.0',
+      id: request.id || null,
+      error: {
+        code: -32601,
+        message: `Method not found: ${request.method}`,
+      },
+    };
+  } catch (error) {
+    console.error('MCP request parsing error:', error);
+    return {
+      jsonrpc: '2.0',
+      id: null,
+      error: {
+        code: -32700,
+        message: 'Parse error',
+        data: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
+}
+
+/**
+ * Start HTTP server with MCP endpoint support
+ */
+function startHTTPServer() {
   const port = process.env.PORT || 3000;
-  const healthServer = createServer((req, res) => {
-    if (req.url === '/health' || req.url === '/') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
+  
+  const httpServer = createServer(async (req, res) => {
+    // CORS headers
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    // Handle OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200, corsHeaders);
+      res.end();
+      return;
+    }
+
+    // Health check endpoint
+    if ((req.url === '/health' || req.url === '/') && req.method === 'GET') {
+      res.writeHead(200, { 
+        'Content-Type': 'application/json',
+        ...corsHeaders 
+      });
       res.end(JSON.stringify({
         status: 'ok',
         service: 'ig-mcp-server',
-        transport: 'stdio',
-        note: 'MCP server communicates via stdin/stdout, not HTTP. This is a health check endpoint.',
+        transport: 'http',
+        endpoint: '/mcp',
+        note: 'MCP server communicates via HTTP POST at /mcp endpoint',
       }));
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
     }
+
+    // MCP endpoint
+    if (req.url === '/mcp' && req.method === 'POST') {
+      let body = '';
+      
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+
+      req.on('end', async () => {
+        try {
+          const response = await handleMCPRequest(body);
+          
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          });
+          res.end(JSON.stringify(response));
+        } catch (error) {
+          console.error('MCP request handler error:', error);
+          res.writeHead(500, {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          });
+          res.end(JSON.stringify({
+            jsonrpc: '2.0',
+            id: null,
+            error: {
+              code: -32603,
+              message: 'Internal error',
+              data: error instanceof Error ? error.message : String(error),
+            },
+          }));
+        }
+      });
+
+      return;
+    }
+
+    // 404 for other endpoints
+    res.writeHead(404, { 
+      'Content-Type': 'application/json',
+      ...corsHeaders 
+    });
+    res.end(JSON.stringify({ error: 'Not found' }));
   });
 
-  healthServer.listen(port, () => {
-    console.error(`Health check server listening on port ${port} (for Railway/deployment health checks)`);
+  httpServer.listen(port, () => {
+    console.error(`IG MCP Server running on HTTP port ${port}`);
+    console.error(`MCP endpoint: http://localhost:${port}/mcp`);
+    console.error(`Health check: http://localhost:${port}/health`);
   });
 
-  healthServer.on('error', (error) => {
-    console.error('Health check server error:', error);
+  httpServer.on('error', (error) => {
+    console.error('HTTP server error:', error);
   });
+
+  return httpServer;
 }
 
 /**
  * Start the server
  */
 async function main() {
-  // Start health check HTTP server for Railway/deployment platforms
-  // Note: MCP communication is via stdio, not HTTP
-  startHealthCheckServer();
+  // Start HTTP server with MCP endpoint support
+  startHTTPServer();
 
-  // Start MCP server on stdio
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  console.error('IG MCP Server running on stdio');
-  console.error('Note: MCP servers communicate via stdin/stdout, not HTTP ports');
+  // Also support stdio for local connections (optional)
+  // This allows the server to work both via HTTP and stdio
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error('IG MCP Server running on both HTTP and stdio');
+  } catch (error) {
+    // If stdio connection fails (e.g., no stdin available), that's ok for HTTP-only mode
+    console.error('Note: stdio transport not available, HTTP transport only');
+  }
 }
 
 main().catch((error) => {
