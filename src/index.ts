@@ -1595,8 +1595,17 @@ function startHTTPServer(): Promise<HttpServer> {
           currentConnectionId = webConnectionId;
           
           // Ensure we have a client for this connection
+          // Use the API key from the request, or fall back to environment variable
+          const apiKey = request.apiKey || API_KEY;
           if (!clients.has(webConnectionId)) {
-            clients.set(webConnectionId, new IGClient(API_KEY, API_URL));
+            clients.set(webConnectionId, new IGClient(apiKey, API_URL));
+          } else {
+            // Update client with new API key if provided
+            const client = clients.get(webConnectionId)!;
+            if (request.apiKey && request.apiKey !== API_KEY) {
+              clients.delete(webConnectionId);
+              clients.set(webConnectionId, new IGClient(apiKey, API_URL));
+            }
           }
           
           const result = await executeToolCall('ig_login', request);
