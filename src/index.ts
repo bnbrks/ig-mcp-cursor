@@ -1902,14 +1902,14 @@ function startHTTPServer(): Promise<HttpServer> {
               const orderRequest = {
                 epic: epic,
                 expiry: trade.expiry || 'DFB',
-                direction: trade.direction,
+                direction: trade.direction as 'BUY' | 'SELL',
                 size: parseFloat(trade.size) || 0.01,
-                orderType: 'LIMIT', // Always use LIMIT order
+                orderType: 'LIMIT' as const, // Always use LIMIT order
                 level: entryLevel, // Entry price for limit order
-                currencyCode: 'GBP', // Always use GBP
+                currencyCode: 'GBP' as const, // Always use GBP
                 stopLevel: stopLevel,
                 limitLevel: limitLevel, // Take profit level
-                timeInForce: 'GOOD_TILL_CANCELLED', // GTC for limit orders
+                timeInForce: 'GOOD_TILL_CANCELLED' as const, // GTC for limit orders
               };
 
               const result = await client.placeOrder(orderRequest, accountId);
