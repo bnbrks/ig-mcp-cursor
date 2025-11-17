@@ -1520,17 +1520,37 @@ function startHTTPServer(): Promise<HttpServer> {
 
       req.on('end', async () => {
         try {
-          // For web requests, try to find an authenticated connection
-          // This allows the API tester to reuse authentication from login
+          // Check if API key is provided in header for web requests
+          const apiKeyHeader = req.headers['x-mcp-api-key'] as string | undefined;
+          
+          // For web requests, try to find an authenticated connection or authenticate with header
           const originalConnectionId = currentConnectionId;
           
-          // Try to find an authenticated connection
-          if (!isConnectionAuthenticated(currentConnectionId)) {
-            for (const [connId, session] of SessionManager.getAllSessions()) {
-              if (session && session.authenticated && isConnectionAuthenticated(connId)) {
-                currentConnectionId = connId;
-                console.error(`[DEBUG] Using authenticated connection: ${connId}`);
-                break;
+          // If API key is provided in header, authenticate first
+          if (apiKeyHeader && MCP_SERVER_API_KEY) {
+            const webConnectionId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            currentConnectionId = webConnectionId;
+            
+            // Authenticate with the provided API key
+            const authResult = await executeToolCall('mcp_authenticate', {
+              apiKey: apiKeyHeader
+            });
+            
+            if (authResult && typeof authResult === 'object' && 'isError' in authResult && authResult.isError) {
+              // Authentication failed, try to find existing authenticated connection
+              currentConnectionId = originalConnectionId;
+            } else {
+              console.error(`[DEBUG] Authenticated with API key header, connection: ${webConnectionId}`);
+            }
+          } else {
+            // Try to find an authenticated connection
+            if (!isConnectionAuthenticated(currentConnectionId)) {
+              for (const [connId, session] of SessionManager.getAllSessions()) {
+                if (session && session.authenticated && isConnectionAuthenticated(connId)) {
+                  currentConnectionId = connId;
+                  console.error(`[DEBUG] Using authenticated connection: ${connId}`);
+                  break;
+                }
               }
             }
           }
