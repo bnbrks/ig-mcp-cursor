@@ -1520,7 +1520,25 @@ function startHTTPServer(): Promise<HttpServer> {
 
       req.on('end', async () => {
         try {
+          // For web requests, try to find an authenticated connection
+          // This allows the API tester to reuse authentication from login
+          const originalConnectionId = currentConnectionId;
+          
+          // Try to find an authenticated connection
+          if (!isConnectionAuthenticated(currentConnectionId)) {
+            for (const [connId, session] of SessionManager.getAllSessions()) {
+              if (session && session.authenticated && isConnectionAuthenticated(connId)) {
+                currentConnectionId = connId;
+                console.error(`[DEBUG] Using authenticated connection: ${connId}`);
+                break;
+              }
+            }
+          }
+          
           const response = await handleMCPRequest(body);
+          
+          // Restore original connection ID
+          currentConnectionId = originalConnectionId;
           
           res.writeHead(200, {
             'Content-Type': 'application/json',
