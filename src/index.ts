@@ -1901,22 +1901,10 @@ function startHTTPServer(): Promise<HttpServer> {
               }
 
               // Use LIMIT order at entry price, not MARKET
-              // Set order to expire at 20:00 UK time today
-              const now = new Date();
-              // Convert to UK time (UTC+0 in winter, UTC+1 in summer - using UTC+0 for simplicity)
-              // For more accuracy, you might want to use a timezone library
-              const ukTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/London' }));
-              const today = new Date(ukTime);
-              today.setHours(20, 0, 0, 0); // Set to 20:00:00
-              
-              // Format as YYYY-MM-DD HH:MM for IG API
-              const year = today.getFullYear();
-              const month = String(today.getMonth() + 1).padStart(2, '0');
-              const day = String(today.getDate()).padStart(2, '0');
-              const hours = String(today.getHours()).padStart(2, '0');
-              const minutes = String(today.getMinutes()).padStart(2, '0');
-              const goodTillDate = `${year}-${month}-${day} ${hours}:${minutes}`;
-              
+              // Note: GOOD_TILL_DATE is not supported for limit orders on OTC positions
+              // We'll use EXECUTE_AND_ELIMINATE which is the default for limit orders
+              // The order will remain active until filled or manually cancelled
+              // TODO: If expiry at 20:00 is required, consider using a scheduled job to cancel orders
               const orderRequest = {
                 epic: epic,
                 expiry: trade.expiry || 'DFB',
@@ -1927,8 +1915,7 @@ function startHTTPServer(): Promise<HttpServer> {
                 currencyCode: 'GBP' as const, // Always use GBP
                 stopLevel: stopLevel,
                 limitLevel: limitLevel, // Take profit level
-                timeInForce: 'GOOD_TILL_DATE' as const, // Valid until specified date
-                goodTillDate: goodTillDate, // Today at 20:00 UK time
+                timeInForce: 'EXECUTE_AND_ELIMINATE' as const, // Only valid option for OTC limit orders
               };
 
               console.error(`[DEBUG] Order request for ${trade.instrument}:`, JSON.stringify(orderRequest, null, 2));
