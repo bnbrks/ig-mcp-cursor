@@ -879,6 +879,98 @@
                 document.getElementById('confirmBtn').disabled = false;
             }
         }
+        
+        function showPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            // Show selected page
+            document.getElementById(`${pageId}-page`).classList.add('active');
+            
+            // Update nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+        
+        function loadExample(type) {
+            const examples = {
+                working_orders: {
+                    jsonrpc: "2.0",
+                    id: 1,
+                    method: "tools/call",
+                    params: {
+                        name: "ig_get_working_orders",
+                        arguments: {}
+                    }
+                },
+                accounts: {
+                    jsonrpc: "2.0",
+                    id: 1,
+                    method: "tools/call",
+                    params: {
+                        name: "ig_get_accounts",
+                        arguments: {}
+                    }
+                }
+            };
+            
+            if (examples[type]) {
+                document.getElementById('apiJsonInput').value = JSON.stringify(examples[type], null, 2);
+            }
+        }
+        
+        async function executeApiCall() {
+            const input = document.getElementById('apiJsonInput').value;
+            const output = document.getElementById('apiJsonOutput');
+            const btn = document.getElementById('executeApiBtn');
+            
+            if (!input.trim()) {
+                output.textContent = 'Please enter a JSON request';
+                output.className = 'json-output error';
+                return;
+            }
+            
+            let requestData;
+            try {
+                requestData = JSON.parse(input);
+            } catch (error) {
+                output.textContent = `Invalid JSON: ${error.message}`;
+                output.className = 'json-output error';
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = 'Executing...';
+            output.textContent = 'Loading...';
+            output.className = 'json-output';
+            
+            try {
+                const response = await fetch('/mcp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                
+                // Format the response
+                output.textContent = JSON.stringify(data, null, 2);
+                output.className = response.ok ? 'json-output success' : 'json-output error';
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+                output.className = 'json-output error';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Execute API Call';
+            }
+        }
     </script>
 </body>
 </html>
