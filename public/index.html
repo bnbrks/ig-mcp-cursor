@@ -496,6 +496,12 @@
                     <h2>🔧 API Tester</h2>
                     <p style="margin-bottom: 20px; color: #666;">Test IG.com API calls directly. Enter a JSON-RPC request and execute it.</p>
                     
+                    <div style="margin-bottom: 15px; padding: 15px; background: #f8f9ff; border-radius: 8px; border: 2px solid #e0e4ff;">
+                        <p style="margin: 0; font-size: 14px; color: #666;">
+                            <strong>Note:</strong> Make sure you're logged in on the Trade Parser page first. The API tester will automatically use your authentication.
+                        </p>
+                    </div>
+                    
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; font-weight: 600;">JSON Request:</label>
                         <textarea 
@@ -949,6 +955,48 @@
             output.className = 'json-output';
             
             try {
+                // If user is logged in, get the stored API key and authenticate first
+                const storedApiKey = document.getElementById('apiKey')?.value;
+                
+                // If this is not an mcp_authenticate call and we have an API key, authenticate first
+                if (requestData.params?.name !== 'mcp_authenticate' && storedApiKey && isAuthenticated) {
+                    // Authenticate with MCP server first
+                    const authRequest = {
+                        jsonrpc: "2.0",
+                        id: 0,
+                        method: "tools/call",
+                        params: {
+                            name: "mcp_authenticate",
+                            arguments: {
+                                apiKey: storedApiKey
+                            }
+                        }
+                    };
+                    
+                    try {
+                        const authResponse = await fetch('/mcp', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(authRequest)
+                        });
+                        const authData = await authResponse.json();
+                        
+                        if (authData.result?.isError) {
+                            output.textContent = `Authentication failed. Please login first.\n\n${JSON.stringify(authData, null, 2)}`;
+                            output.className = 'json-output error';
+                            btn.disabled = false;
+                            btn.textContent = 'Execute API Call';
+                            return;
+                        }
+                    } catch (authError) {
+                        console.error('Auth error:', authError);
+                        // Continue anyway, might work if already authenticated
+                    }
+                }
+                
+                // Now make the actual API call
                 const response = await fetch('/mcp', {
                     method: 'POST',
                     headers: {
