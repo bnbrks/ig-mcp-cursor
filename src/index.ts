@@ -13,15 +13,28 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { createServer, Server as HttpServer } from 'http';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import formidable from 'formidable';
+import OpenAI from 'openai';
 import { IGClient } from './ig-client.js';
 import { SessionManager } from './session-manager.js';
 import type { IGCredentials, IGSession } from './types.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Get environment variables with defaults
 const API_KEY = process.env.IG_API_KEY || '';
 const USERNAME = process.env.IG_USERNAME || '';
 const PASSWORD = process.env.IG_PASSWORD || '';
 const API_URL = process.env.IG_API_URL || 'https://api.ig.com/gateway/deal';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const DEFAULT_ACCOUNT_ID = process.env.DEFAULT_ACCOUNT_ID || '';
+
+// Initialize OpenAI client
+const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
 // Security: Optional MCP server API key (recommended for public deployments)
 const MCP_SERVER_API_KEY = process.env.MCP_SERVER_API_KEY || '';
@@ -1480,7 +1493,7 @@ function startHTTPServer(): Promise<HttpServer> {
     }
 
     // Health check endpoint
-    if ((req.url === '/health' || req.url === '/') && req.method === 'GET') {
+    if (req.url === '/health' && req.method === 'GET') {
       console.error(`[${new Date().toISOString()}] Handling health check request`);
       res.writeHead(200, { 
         'Content-Type': 'application/json',
@@ -1532,6 +1545,280 @@ function startHTTPServer(): Promise<HttpServer> {
         }
       });
 
+      return;
+    }
+
+    // Serve static HTML page
+    if (req.url === '/' && req.method === 'GET') {
+      try {
+        const htmlPath = join(__dirname, '../public/index.html');
+        if (existsSync(htmlPath)) {
+          const html = readFileSync(htmlPath, 'utf-8');
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(html);
+          return;
+        } else {
+          // Fallback if HTML file doesn't exist
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(`
+            <html><body>
+              <h1>IG MCP Server</h1>
+              <p>Web interface not found. Please ensure public/index.html exists.</p>
+              <p><a href="/health">Health Check</a></p>
+            </body></html>
+          `);
+          return;
+        }
+      } catch (error) {
+        console.error('Error serving HTML:', error);
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Error serving page');
+        return;
+      }
+    }
+
+    // Web login endpoint (for web interface)
+    if (req.url === '/api/login' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      
+      req.on('end', async () => {
+        try {
+          const request = JSON.parse(body);
+          const result = await executeToolCall('ig_login', request);
+          
+          const isError = result && typeof result === 'object' && 'isError' in result && result.isError;
+          
+          res.writeHead(isError ? 401 : 200, {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          });
+          
+          const responseText = result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)
+            ? result.content[0]?.text || '{}'
+            : JSON.stringify(result);
+          
+          let responseData;
+          try {
+            responseData = JSON.parse(responseText);
+          } catch {
+            responseData = { message: responseText };
+          }
+          
+          res.end(JSON.stringify(responseData));
+        } catch (error) {
+          console.error('Login error:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ 
+            error: error instanceof Error ? error.message : 'Login failed' 
+          }));
+        }
+      });
+      return;
+    }
+
+    // Parse trades from image endpoint
+    if (req.url === '/api/parse-trades' && req.method === 'POST') {
+      try {
+        const form = formidable({
+          maxFileSize: 10 * 1024 * 1024, // 10MB
+          keepExtensions: true,
+        });
+        
+        const [fields, files] = await form.parse(req);
+        const file = Array.isArray(files.image) ? files.image[0] : files.image;
+        
+        if (!file || !file[0]) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ error: 'No image file provided' }));
+          return;
+        }
+
+        const fileObj = file[0];
+        const imageBuffer = readFileSync(fileObj.filepath);
+        const base64Image = imageBuffer.toString('base64');
+
+        if (!openai) {
+          res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ error: 'OpenAI API key not configured' }));
+          return;
+        }
+
+        // Use OpenAI Vision API to parse the image
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a trading assistant. Analyze the screenshot and extract trade information. 
+              Return a JSON array of trades, where each trade has:
+              - instrument: The trading instrument name (e.g., "FTSE", "EUR/USD", "Apple")
+              - direction: "BUY" or "SELL"
+              - size: The trade size (number)
+              - orderType: "MARKET" or "LIMIT" (default to "MARKET")
+              - expiry: Optional expiry if it's a daily/futures contract (e.g., "DFB" for daily funded bets)
+              - currencyCode: Optional currency code (e.g., "GBP", "USD")
+              
+              Return ONLY valid JSON, no other text. Example format:
+              [{"instrument": "FTSE", "direction": "BUY", "size": 0.01, "orderType": "MARKET", "expiry": "DFB", "currencyCode": "GBP"}]`
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Extract all trades from this screenshot. Return a JSON array of trade objects.'
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:image/jpeg;base64,${base64Image}`
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 1000,
+        });
+
+        const responseText = completion.choices[0]?.message?.content || '[]';
+        let trades = [];
+        
+        try {
+          // Extract JSON from response (handle markdown code blocks)
+          const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            trades = JSON.parse(jsonMatch[0]);
+          }
+        } catch (parseError) {
+          console.error('Error parsing OpenAI response:', parseError);
+          res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ error: 'Failed to parse trade data from image' }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json', ...corsHeaders });
+        res.end(JSON.stringify({ trades }));
+      } catch (error) {
+        console.error('Error parsing trades:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+        res.end(JSON.stringify({ 
+          error: error instanceof Error ? error.message : 'Failed to parse trades' 
+        }));
+      }
+      return;
+    }
+
+    // Place trades endpoint
+    if (req.url === '/api/place-trades' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      
+      req.on('end', async () => {
+        try {
+          const { trades } = JSON.parse(body);
+          
+          if (!Array.isArray(trades) || trades.length === 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
+            res.end(JSON.stringify({ error: 'No trades provided' }));
+            return;
+          }
+
+          const connectionId = currentConnectionId;
+          const client = getClient(connectionId);
+          const session = getSession(connectionId);
+          
+          if (!session || !session.authenticated) {
+            res.writeHead(401, { 'Content-Type': 'application/json', ...corsHeaders });
+            res.end(JSON.stringify({ error: 'Not authenticated. Please login first.' }));
+            return;
+          }
+
+          client.setSession(session);
+          const accountId = DEFAULT_ACCOUNT_ID || session.accountId;
+
+          const results = [];
+          
+          for (const trade of trades) {
+            try {
+              // Map instrument name to epic
+              let epic = trade.epic;
+              if (!epic && trade.instrument) {
+                // Try to map common instrument names to epics
+                const instrumentUpper = trade.instrument.toUpperCase().trim();
+                const instrumentMap: Record<string, string> = {
+                  'FTSE': 'IX.D.FTSE.DAILY.IP',
+                  'FTSE 100': 'IX.D.FTSE.DAILY.IP',
+                  'FTSE100': 'IX.D.FTSE.DAILY.IP',
+                  'FTSE 100 DAILY': 'IX.D.FTSE.DAILY.IP',
+                };
+                epic = instrumentMap[instrumentUpper];
+                
+                // If not found in map, try searching for the instrument
+                if (!epic) {
+                  console.error(`Searching for instrument: ${trade.instrument}`);
+                  const searchResult = await client.searchInstruments(trade.instrument);
+                  if (searchResult.success && searchResult.data) {
+                    const markets = (searchResult.data as any).markets || [];
+                    if (markets.length > 0) {
+                      // Try to find a daily/spread bet instrument
+                      const dailyInstrument = markets.find((m: any) => 
+                        m.epic && (m.epic.includes('.DAILY.') || m.instrumentType === 'SPREADBET')
+                      );
+                      epic = dailyInstrument?.epic || markets[0]?.epic;
+                      console.error(`Found epic: ${epic} for instrument: ${trade.instrument}`);
+                    }
+                  }
+                }
+                
+                // If still no epic, use the instrument name as-is (might work for some cases)
+                if (!epic) {
+                  epic = trade.instrument;
+                }
+              }
+              
+              if (!epic) {
+                throw new Error(`No epic found for instrument: ${trade.instrument}`);
+              }
+
+              const orderRequest = {
+                epic: epic,
+                expiry: trade.expiry || 'DFB',
+                direction: trade.direction,
+                size: parseFloat(trade.size),
+                orderType: trade.orderType || 'MARKET',
+                currencyCode: trade.currencyCode || 'GBP',
+              };
+
+              const result = await client.placeOrder(orderRequest, accountId);
+              
+              results.push({
+                success: result.success,
+                message: result.userMessage || (result.success ? 'Order placed' : 'Order failed'),
+                dealReference: result.data && typeof result.data === 'object' && 'dealReference' in result.data 
+                  ? (result.data as any).dealReference 
+                  : undefined,
+                error: result.error,
+              });
+            } catch (error) {
+              results.push({
+                success: false,
+                message: error instanceof Error ? error.message : 'Unknown error',
+                error: String(error),
+              });
+            }
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ results }));
+        } catch (error) {
+          console.error('Error placing trades:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ 
+            error: error instanceof Error ? error.message : 'Failed to place trades' 
+          }));
+        }
+      });
       return;
     }
 

@@ -12,6 +12,7 @@ RUN npm install
 
 # Copy source code
 COPY src/ ./src/
+COPY public/ ./public/
 
 # Build TypeScript
 RUN npm run build
@@ -29,6 +30,7 @@ RUN npm install --only=production
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
+COPY public/ ./public/
 
 # Set as executable
 RUN chmod +x dist/index.js

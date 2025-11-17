@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IG Trade Parser</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .upload-section {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s;
+        }
+        
+        .upload-section:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+        
+        .upload-section.dragover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .preview-section {
+            margin: 30px 0;
+            display: none;
+        }
+        
+        .preview-section.active {
+            display: block;
+        }
+        
+        .image-preview {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .trades-section {
+            margin: 30px 0;
+            display: none;
+        }
+        
+        .trades-section.active {
+            display: block;
+        }
+        
+        .trade-card {
+            background: #f8f9ff;
+            border: 2px solid #e0e4ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .trade-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .trade-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .trade-detail {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .trade-detail strong {
+            color: #667eea;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #e0e4ff;
+            color: #667eea;
+        }
+        
+        .btn-secondary:hover {
+            background: #d0d4ff;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .success {
+            background: #efe;
+            border: 2px solid #cfc;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 IG Trade Parser</h1>
+            <p>Upload a screenshot of your trades and place them automatically</p>
+        </div>
+        
+        <div class="content">
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-icon">📸</div>
+                <h2>Upload Trade Screenshot</h2>
+                <p style="margin: 15px 0; color: #666;">Drag and drop an image or click to browse</p>
+                <input type="file" id="fileInput" accept="image/*">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Choose Image
+                </button>
+            </div>
+            
+            <div class="preview-section" id="previewSection">
+                <h3>Image Preview</h3>
+                <img id="imagePreview" class="image-preview" alt="Preview">
+                <div class="actions">
+                    <button class="btn btn-secondary" onclick="resetUpload()">Upload Different Image</button>
+                    <button class="btn btn-primary" id="parseBtn" onclick="parseImage()">Parse Trades</button>
+                </div>
+            </div>
+            
+            <div id="loadingSection" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Parsing trades from image...</p>
+            </div>
+            
+            <div id="errorSection"></div>
+            <div id="successSection"></div>
+            
+            <div class="trades-section" id="tradesSection">
+                <h2>Extracted Trades</h2>
+                <div id="tradesList"></div>
+                <div class="actions">
+                    <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
+                    <button class="btn btn-primary" id="confirmBtn" onclick="placeTrades()">Confirm & Place Trades</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentImage = null;
+        let parsedTrades = [];
+        
+        const fileInput = document.getElementById('fileInput');
+        const uploadSection = document.getElementById('uploadSection');
+        const previewSection = document.getElementById('previewSection');
+        const tradesSection = document.getElementById('tradesSection');
+        const imagePreview = document.getElementById('imagePreview');
+        const loadingSection = document.getElementById('loadingSection');
+        const errorSection = document.getElementById('errorSection');
+        const successSection = document.getElementById('successSection');
+        
+        // File input handler
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        });
+        
+        // Drag and drop handlers
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+        
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+        
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                handleFile(file);
+            }
+        });
+        
+        function handleFile(file) {
+            currentImage = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                previewSection.classList.add('active');
+                uploadSection.style.display = 'none';
+                errorSection.innerHTML = '';
+                successSection.innerHTML = '';
+                tradesSection.classList.remove('active');
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function resetUpload() {
+            currentImage = null;
+            parsedTrades = [];
+            fileInput.value = '';
+            previewSection.classList.remove('active');
+            tradesSection.classList.remove('active');
+            uploadSection.style.display = 'block';
+            errorSection.innerHTML = '';
+            successSection.innerHTML = '';
+        }
+        
+        async function parseImage() {
+            if (!currentImage) return;
+            
+            loadingSection.style.display = 'block';
+            errorSection.innerHTML = '';
+            successSection.innerHTML = '';
+            document.getElementById('parseBtn').disabled = true;
+            
+            try {
+                const formData = new FormData();
+                formData.append('image', currentImage);
+                
+                const response = await fetch('/api/parse-trades', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to parse trades');
+                }
+                
+                parsedTrades = data.trades || [];
+                displayTrades(parsedTrades);
+                
+            } catch (error) {
+                errorSection.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                loadingSection.style.display = 'none';
+                document.getElementById('parseBtn').disabled = false;
+            }
+        }
+        
+        function displayTrades(trades) {
+            const tradesList = document.getElementById('tradesList');
+            tradesList.innerHTML = '';
+            
+            if (trades.length === 0) {
+                tradesList.innerHTML = '<p>No trades found in the image.</p>';
+                return;
+            }
+            
+            trades.forEach((trade, index) => {
+                const tradeCard = document.createElement('div');
+                tradeCard.className = 'trade-card';
+                tradeCard.innerHTML = `
+                    <h3>Trade ${index + 1}</h3>
+                    <div class="trade-details">
+                        <div class="trade-detail"><strong>Instrument:</strong> ${trade.instrument || 'N/A'}</div>
+                        <div class="trade-detail"><strong>Direction:</strong> ${trade.direction || 'N/A'}</div>
+                        <div class="trade-detail"><strong>Size:</strong> ${trade.size || 'N/A'}</div>
+                        <div class="trade-detail"><strong>Order Type:</strong> ${trade.orderType || 'MARKET'}</div>
+                        ${trade.expiry ? `<div class="trade-detail"><strong>Expiry:</strong> ${trade.expiry}</div>` : ''}
+                        ${trade.currencyCode ? `<div class="trade-detail"><strong>Currency:</strong> ${trade.currencyCode}</div>` : ''}
+                    </div>
+                `;
+                tradesList.appendChild(tradeCard);
+            });
+            
+            tradesSection.classList.add('active');
+        }
+        
+        async function placeTrades() {
+            if (parsedTrades.length === 0) return;
+            
+            document.getElementById('confirmBtn').disabled = true;
+            loadingSection.style.display = 'block';
+            errorSection.innerHTML = '';
+            successSection.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/place-trades', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ trades: parsedTrades })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to place trades');
+                }
+                
+                const successMsg = document.createElement('div');
+                successMsg.className = 'success';
+                successMsg.innerHTML = `
+                    <h3>✅ Trades Placed Successfully!</h3>
+                    <p>${data.results.length} trade(s) processed:</p>
+                    <ul style="margin-top: 10px; padding-left: 20px;">
+                        ${data.results.map(r => `<li>${r.success ? '✅' : '❌'} ${r.message} ${r.dealReference ? `(Ref: ${r.dealReference})` : ''}</li>`).join('')}
+                    </ul>
+                `;
+                successSection.appendChild(successMsg);
+                
+            } catch (error) {
+                errorSection.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                loadingSection.style.display = 'none';
+                document.getElementById('confirmBtn').disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+
