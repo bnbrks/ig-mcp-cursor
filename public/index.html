@@ -959,7 +959,61 @@
             output.className = 'json-output';
             
             try {
-                // Make the API call - server will automatically use authenticated connection
+                // Get stored API key from sessionStorage or form
+                const storedApiKey = sessionStorage.getItem('mcpApiKey') || document.getElementById('apiKey')?.value;
+                
+                // If this is not an mcp_authenticate call and we have an API key, authenticate first
+                if (requestData.params?.name !== 'mcp_authenticate' && storedApiKey) {
+                    // Authenticate with MCP server first (this must happen before each call)
+                    const authRequest = {
+                        jsonrpc: "2.0",
+                        id: 0,
+                        method: "tools/call",
+                        params: {
+                            name: "mcp_authenticate",
+                            arguments: {
+                                apiKey: storedApiKey
+                            }
+                        }
+                    };
+                    
+                    try {
+                        const authResponse = await fetch('/mcp', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(authRequest)
+                        });
+                        const authData = await authResponse.json();
+                        
+                        if (authData.result?.isError) {
+                            output.textContent = `Authentication failed. Please login on the Trade Parser page first.\n\n${JSON.stringify(authData, null, 2)}`;
+                            output.className = 'json-output error';
+                            btn.disabled = false;
+                            btn.textContent = 'Execute API Call';
+                            return;
+                        }
+                        
+                        // Small delay to ensure authentication is processed
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    } catch (authError) {
+                        console.error('Auth error:', authError);
+                        output.textContent = `Authentication error: ${authError.message}. Please login on the Trade Parser page first.`;
+                        output.className = 'json-output error';
+                        btn.disabled = false;
+                        btn.textContent = 'Execute API Call';
+                        return;
+                    }
+                } else if (!storedApiKey && requestData.params?.name !== 'mcp_authenticate') {
+                    output.textContent = 'No API key found. Please login on the Trade Parser page first.';
+                    output.className = 'json-output error';
+                    btn.disabled = false;
+                    btn.textContent = 'Execute API Call';
+                    return;
+                }
+                
+                // Now make the actual API call
                 const response = await fetch('/mcp', {
                     method: 'POST',
                     headers: {
