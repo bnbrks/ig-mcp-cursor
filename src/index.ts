@@ -1842,6 +1842,87 @@ function startHTTPServer(): Promise<HttpServer> {
       return;
     }
 
+    // Generate JSON from prompt endpoint
+    if (req.url === '/api/generate-json' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk.toString(); });
+      
+      req.on('end', async () => {
+        try {
+          const { prompt } = JSON.parse(body);
+          
+          if (!prompt) {
+            res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
+            res.end(JSON.stringify({ error: 'Prompt is required' }));
+            return;
+          }
+          
+          if (!openai) {
+            res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+            res.end(JSON.stringify({ error: 'OpenAI API key not configured' }));
+            return;
+          }
+          
+          // Use OpenAI to generate JSON-RPC request based on the prompt
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a helpful assistant that generates JSON-RPC requests for the IG.com trading API.
+
+Available tools:
+- ig_get_accounts: Get all accounts (no arguments)
+- ig_get_working_orders: Get all working/limit orders (no arguments)
+- ig_get_open_positions: Get all open positions (no arguments)
+- ig_get_positions: Get all positions (no arguments)
+- ig_search_instruments: Search for trading instruments (arguments: searchTerm: string)
+- ig_get_market_data: Get market data for an instrument (arguments: epic: string)
+- ig_place_order: Place a trading order (arguments: epic, direction: "BUY"|"SELL", size: number, orderType: "MARKET"|"LIMIT"|"STOP", level?: number, stopLevel?: number, limitLevel?: number, expiry?: string, currencyCode?: string)
+- ig_get_account_balance: Get account balance (arguments: accountId: string)
+- ig_close_position: Close a position (arguments: dealId: string, direction: "BUY"|"SELL", size: number)
+- ig_delete_working_order: Delete a working order (arguments: dealId: string)
+- ig_get_historical_prices: Get historical prices (arguments: epic: string, resolution: string, from: string, to: string, pageSize?: number)
+- ig_get_watchlists: Get watchlists (no arguments)
+- ig_get_watchlist_markets: Get markets in a watchlist (arguments: watchlistId: string)
+
+Return ONLY a valid JSON-RPC 2.0 request object. Format:
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "tool_name",
+    "arguments": { ... }
+  }
+}
+
+Do not include any explanation, just the JSON object.`
+              },
+              {
+                role: 'user',
+                content: prompt
+              }
+            ],
+            max_tokens: 500,
+            temperature: 0.3,
+          });
+          
+          const responseText = completion.choices[0]?.message?.content || '{}';
+          
+          res.writeHead(200, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ json: responseText, response: responseText }));
+        } catch (error) {
+          console.error('Error generating JSON:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ 
+            error: error instanceof Error ? error.message : 'Failed to generate JSON' 
+          }));
+        }
+      });
+      return;
+    }
+
     // Place trades endpoint
     if (req.url === '/api/place-trades' && req.method === 'POST') {
       let body = '';

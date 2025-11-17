@@ -494,7 +494,7 @@
             <div class="page" id="api-test-page">
                 <div class="api-test-section">
                     <h2>🔧 API Tester</h2>
-                    <p style="margin-bottom: 20px; color: #666;">Test IG.com API calls directly. Enter a JSON-RPC request and execute it.</p>
+                    <p style="margin-bottom: 20px; color: #666;">Describe what you want to do with the IG API, and AI will generate the JSON request for you.</p>
                     
                     <div style="margin-bottom: 15px; padding: 15px; background: #f8f9ff; border-radius: 8px; border: 2px solid #e0e4ff;">
                         <p style="margin: 0; font-size: 14px; color: #666;">
@@ -502,20 +502,28 @@
                         </p>
                     </div>
                     
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Describe what you want to do:</label>
+                        <textarea 
+                            id="promptInput" 
+                            class="json-input" 
+                            placeholder='Example: "Get all my open positions" or "Search for FTSE instruments" or "Place a buy order for FTSE at 9610 with stop loss at 9593"'
+                            style="min-height: 100px;"
+                        ></textarea>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <button class="btn btn-primary" onclick="generateJsonFromPrompt()" id="generateJsonBtn" style="width: auto;">
+                            🤖 Generate JSON Request
+                        </button>
+                    </div>
+                    
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; font-weight: 600;">JSON Request:</label>
                         <textarea 
                             id="apiJsonInput" 
                             class="json-input" 
-                            placeholder='{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "ig_get_working_orders",
-    "arguments": {}
-  }
-}'
+                            placeholder='Generated JSON will appear here, or paste your own JSON-RPC request...'
                         ></textarea>
                     </div>
                     
@@ -930,6 +938,73 @@
             
             if (examples[type]) {
                 document.getElementById('apiJsonInput').value = JSON.stringify(examples[type], null, 2);
+            }
+        }
+        
+        async function generateJsonFromPrompt() {
+            const prompt = document.getElementById('promptInput').value.trim();
+            const generateBtn = document.getElementById('generateJsonBtn');
+            const jsonInput = document.getElementById('apiJsonInput');
+            
+            if (!prompt) {
+                alert('Please enter a description of what you want to do');
+                return;
+            }
+            
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+            jsonInput.value = 'Generating JSON request from your prompt...';
+            
+            try {
+                const response = await fetch('/api/generate-json', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to generate JSON');
+                }
+                
+                // Parse and format the JSON response
+                let jsonRequest;
+                try {
+                    // Try to extract JSON from the response
+                    const jsonText = data.json || data.response || JSON.stringify(data);
+                    // Try to find JSON in the text (handle markdown code blocks)
+                    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        jsonRequest = JSON.parse(jsonMatch[0]);
+                    } else {
+                        jsonRequest = JSON.parse(jsonText);
+                    }
+                } catch (parseError) {
+                    // If parsing fails, try to construct a basic request
+                    jsonRequest = {
+                        jsonrpc: "2.0",
+                        id: 1,
+                        method: "tools/call",
+                        params: {
+                            name: "ig_get_accounts",
+                            arguments: {}
+                        }
+                    };
+                    jsonInput.value = `Error parsing AI response. Please try again or enter JSON manually.\n\nAI Response: ${data.json || data.response || JSON.stringify(data)}`;
+                    return;
+                }
+                
+                // Populate the JSON input field with formatted JSON
+                jsonInput.value = JSON.stringify(jsonRequest, null, 2);
+                
+            } catch (error) {
+                jsonInput.value = `Error: ${error.message}\n\nPlease try again or enter the JSON manually.`;
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🤖 Generate JSON Request';
             }
         }
         
