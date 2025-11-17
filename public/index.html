@@ -963,7 +963,7 @@
                 const storedApiKey = sessionStorage.getItem('mcpApiKey') || document.getElementById('apiKey')?.value;
                 
                 // Build headers - include API key if available and not doing mcp_authenticate
-                const headers: Record<string, string> = {
+                const headers = {
                     'Content-Type': 'application/json'
                 };
                 
