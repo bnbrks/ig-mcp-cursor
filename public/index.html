@@ -166,6 +166,37 @@
             margin-top: 10px;
         }
         
+        .login-section {
+            background: #f8f9ff;
+            border: 2px solid #e0e4ff;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .login-section h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .login-status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+        
+        .login-status.success {
+            background: #efe;
+            border: 2px solid #cfc;
+            color: #3c3;
+        }
+        
+        .login-status.error {
+            background: #fee;
+            border: 2px solid #fcc;
+            color: #c33;
+        }
+        
         .actions {
             display: flex;
             gap: 15px;
@@ -255,7 +286,43 @@
         </div>
         
         <div class="content">
-            <div class="upload-section" id="uploadSection">
+            <!-- Login Section -->
+            <div class="login-section" id="loginSection">
+                <h2>🔐 IG.com Authentication</h2>
+                <p style="margin-bottom: 20px; color: #666;">Enter your IG.com credentials to place trades</p>
+                <form id="loginForm" onsubmit="handleLogin(event)">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">API Key:</label>
+                        <input type="text" 
+                               id="apiKey" 
+                               placeholder="Your IG.com API Key" 
+                               required
+                               style="width: 100%; padding: 10px; border: 2px solid #e0e4ff; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Username:</label>
+                        <input type="text" 
+                               id="username" 
+                               placeholder="Your IG.com Username" 
+                               required
+                               style="width: 100%; padding: 10px; border: 2px solid #e0e4ff; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Password:</label>
+                        <input type="password" 
+                               id="password" 
+                               placeholder="Your IG.com Password (append 2FA code if enabled)" 
+                               required
+                               style="width: 100%; padding: 10px; border: 2px solid #e0e4ff; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="loginBtn" style="width: 100%;">
+                        Login to IG.com
+                    </button>
+                </form>
+                <div id="loginStatus" style="margin-top: 15px;"></div>
+            </div>
+            
+            <div class="upload-section" id="uploadSection" style="display: none;">
                 <div class="upload-icon">📸</div>
                 <h2>Upload Trade Screenshot</h2>
                 <p style="margin: 15px 0; color: #666;">Drag and drop an image, paste from clipboard (Ctrl+V/Cmd+V), or click to browse</p>
@@ -365,6 +432,48 @@
             reader.readAsDataURL(file);
         }
         
+        async function handleLogin(event) {
+            event.preventDefault();
+            
+            const apiKey = document.getElementById('apiKey').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            loginStatus.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        apiKey: apiKey,
+                        username: username,
+                        password: password
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.data && data.data.authenticated) {
+                    isAuthenticated = true;
+                    loginStatus.innerHTML = `<div class="login-status success">✅ Successfully logged in! Account: ${data.data.accountId || 'N/A'}</div>`;
+                    loginSection.style.display = 'none';
+                    uploadSection.style.display = 'block';
+                } else {
+                    throw new Error(data.message || data.error || 'Login failed');
+                }
+            } catch (error) {
+                loginStatus.innerHTML = `<div class="login-status error">❌ Error: ${error.message}</div>`;
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login to IG.com';
+            }
+        }
+        
         function resetUpload() {
             currentImage = null;
             parsedTrades = [];
@@ -459,6 +568,13 @@
         
         async function placeTrades() {
             if (parsedTrades.length === 0) return;
+            
+            if (!isAuthenticated) {
+                errorSection.innerHTML = '<div class="error">Please login first before placing trades.</div>';
+                loginSection.style.display = 'block';
+                uploadSection.style.display = 'none';
+                return;
+            }
             
             // Update sizes from input fields
             parsedTrades.forEach((trade, index) => {

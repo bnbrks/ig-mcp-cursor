@@ -78,6 +78,17 @@ export class SessionManager {
   }
 
   /**
+   * Get all sessions (for finding authenticated connections)
+   */
+  static getAllSessions(): IterableIterator<[string, IGSession | null]> {
+    const result = new Map<string, IGSession | null>();
+    for (const [connId, store] of sessions.entries()) {
+      result.set(connId, store.session);
+    }
+    return result.entries();
+  }
+
+  /**
    * Generate a connection ID
    * In a real implementation, this would come from the MCP connection context
    * For now, we'll use a simple timestamp-based ID

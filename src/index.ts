@@ -1585,7 +1585,24 @@ function startHTTPServer(): Promise<HttpServer> {
       req.on('end', async () => {
         try {
           const request = JSON.parse(body);
+          
+          // Generate a unique connection ID for this web session
+          // Use a simple approach: generate based on timestamp + random
+          const webConnectionId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          
+          // Temporarily set the connection ID for this request
+          const originalConnectionId = currentConnectionId;
+          currentConnectionId = webConnectionId;
+          
+          // Ensure we have a client for this connection
+          if (!clients.has(webConnectionId)) {
+            clients.set(webConnectionId, new IGClient(API_KEY, API_URL));
+          }
+          
           const result = await executeToolCall('ig_login', request);
+          
+          // Restore original connection ID
+          currentConnectionId = originalConnectionId;
           
           const isError = result && typeof result === 'object' && 'isError' in result && result.isError;
           
@@ -1601,6 +1618,10 @@ function startHTTPServer(): Promise<HttpServer> {
           let responseData;
           try {
             responseData = JSON.parse(responseText);
+            // Include connection ID in response for subsequent requests
+            if (!isError && responseData.data) {
+              responseData.data.connectionId = webConnectionId;
+            }
           } catch {
             responseData = { message: responseText };
           }
@@ -1746,7 +1767,27 @@ function startHTTPServer(): Promise<HttpServer> {
             return;
           }
 
-          const connectionId = currentConnectionId;
+          // Get connection ID from request or use default
+          // For web interface, we'll use the first authenticated connection
+          let connectionId = currentConnectionId;
+          
+          // Try to find an authenticated web connection
+          if (!connectionId || !isConnectionAuthenticated(connectionId)) {
+            // Find any authenticated connection
+            for (const [connId, session] of SessionManager.getAllSessions()) {
+              if (session && session.authenticated) {
+                connectionId = connId;
+                break;
+              }
+            }
+          }
+          
+          if (!connectionId || !isConnectionAuthenticated(connectionId)) {
+            res.writeHead(401, { 'Content-Type': 'application/json', ...corsHeaders });
+            res.end(JSON.stringify({ error: 'Not authenticated. Please login first.' }));
+            return;
+          }
+          
           const client = getClient(connectionId);
           const session = getSession(connectionId);
           
