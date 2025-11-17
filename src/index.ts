@@ -1587,42 +1587,63 @@ function startHTTPServer(): Promise<HttpServer> {
           const request = JSON.parse(body);
           
           // Generate a unique connection ID for this web session
-          // Use a simple approach: generate based on timestamp + random
           const webConnectionId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           
           // Temporarily set the connection ID for this request
           const originalConnectionId = currentConnectionId;
           currentConnectionId = webConnectionId;
           
-          // Ensure we have a client for this connection
-          // Use the API key from the request, or fall back to environment variable
-          const apiKey = request.apiKey || API_KEY;
-          if (!clients.has(webConnectionId)) {
-            clients.set(webConnectionId, new IGClient(apiKey, API_URL));
-          } else {
-            // Update client with new API key if provided
-            const client = clients.get(webConnectionId)!;
-            if (request.apiKey && request.apiKey !== API_KEY) {
-              clients.delete(webConnectionId);
-              clients.set(webConnectionId, new IGClient(apiKey, API_URL));
+          // Step 1: Authenticate with MCP server using the provided API key
+          const mcpAuthResult = await executeToolCall('mcp_authenticate', {
+            apiKey: request.apiKey
+          });
+          
+          const mcpAuthError = mcpAuthResult && typeof mcpAuthResult === 'object' && 'isError' in mcpAuthResult && mcpAuthResult.isError;
+          
+          if (mcpAuthError) {
+            // Restore original connection ID
+            currentConnectionId = originalConnectionId;
+            
+            const mcpAuthText = mcpAuthResult && typeof mcpAuthResult === 'object' && 'content' in mcpAuthResult && Array.isArray(mcpAuthResult.content)
+              ? mcpAuthResult.content[0]?.text || '{}'
+              : JSON.stringify(mcpAuthResult);
+            
+            let mcpAuthData;
+            try {
+              mcpAuthData = JSON.parse(mcpAuthText);
+            } catch {
+              mcpAuthData = { message: mcpAuthText };
             }
+            
+            res.writeHead(401, { 'Content-Type': 'application/json', ...corsHeaders });
+            res.end(JSON.stringify({ 
+              error: mcpAuthData.message || 'MCP server authentication failed' 
+            }));
+            return;
           }
           
-          const result = await executeToolCall('ig_login', request);
+          // Step 2: Auto-login to IG using environment variables
+          // Ensure we have a client for this connection
+          if (!clients.has(webConnectionId)) {
+            clients.set(webConnectionId, new IGClient(API_KEY, API_URL));
+          }
+          
+          // Login to IG using environment variables
+          const igLoginResult = await executeToolCall('ig_login', {});
           
           // Restore original connection ID
           currentConnectionId = originalConnectionId;
           
-          const isError = result && typeof result === 'object' && 'isError' in result && result.isError;
+          const isError = igLoginResult && typeof igLoginResult === 'object' && 'isError' in igLoginResult && igLoginResult.isError;
           
           res.writeHead(isError ? 401 : 200, {
             'Content-Type': 'application/json',
             ...corsHeaders
           });
           
-          const responseText = result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)
-            ? result.content[0]?.text || '{}'
-            : JSON.stringify(result);
+          const responseText = igLoginResult && typeof igLoginResult === 'object' && 'content' in igLoginResult && Array.isArray(igLoginResult.content)
+            ? igLoginResult.content[0]?.text || '{}'
+            : JSON.stringify(igLoginResult);
           
           let responseData;
           try {
