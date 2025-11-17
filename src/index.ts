@@ -1628,20 +1628,30 @@ function startHTTPServer(): Promise<HttpServer> {
         const [fields, files] = await form.parse(req);
         const fileArray = files.image;
         
-        if (!fileArray || (Array.isArray(fileArray) && fileArray.length === 0) || (!Array.isArray(fileArray) && !fileArray)) {
+        if (!fileArray) {
           res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
           res.end(JSON.stringify({ error: 'No image file provided' }));
           return;
         }
 
-        const fileObj = Array.isArray(fileArray) ? fileArray[0] : fileArray;
-        if (!fileObj || !fileObj.filepath) {
+        // formidable v3 returns files as arrays
+        const fileList = Array.isArray(fileArray) ? fileArray : [fileArray];
+        if (fileList.length === 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ error: 'No image file provided' }));
+          return;
+        }
+
+        const fileObj = fileList[0];
+        if (!fileObj || typeof fileObj !== 'object' || !('filepath' in fileObj)) {
           res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
           res.end(JSON.stringify({ error: 'Invalid file upload' }));
           return;
         }
 
-        const imageBuffer = readFileSync(fileObj.filepath);
+        const filepath = (fileObj as { filepath: string }).filepath;
+
+        const imageBuffer = readFileSync(filepath);
         const base64Image = imageBuffer.toString('base64');
 
         if (!openai) {
