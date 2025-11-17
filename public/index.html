@@ -641,6 +641,10 @@
                 
                 // If MCP authentication successful, server will auto-login to IG using env vars
                 isAuthenticated = true;
+                
+                // Store API key in sessionStorage for API tester to use
+                sessionStorage.setItem('mcpApiKey', apiKey);
+                
                 loginStatus.innerHTML = `<div class="login-status success">✅ Successfully authenticated! Ready to place trades.</div>`;
                 
                 // Hide login and show upload section after a brief delay
