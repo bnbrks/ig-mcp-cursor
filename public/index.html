@@ -649,9 +649,12 @@
                 const borderColor = success ? '#cfc' : '#fcc';
                 const textColor = success ? '#3c3' : '#c33';
                 
+                // Format message with line breaks for debug info
+                const formattedMessage = message.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+                
                 resultEl.innerHTML = `
-                    <div style="background: ${bgColor}; border: 2px solid ${borderColor}; color: ${textColor}; padding: 10px; border-radius: 6px; font-size: 14px;">
-                        ${icon} <strong>${message}</strong>
+                    <div style="background: ${bgColor}; border: 2px solid ${borderColor}; color: ${textColor}; padding: 10px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; word-wrap: break-word;">
+                        ${icon} <strong>${formattedMessage}</strong>
                         ${dealReference ? `<br><small>Deal Reference: ${dealReference}</small>` : ''}
                     </div>
                 `;
@@ -705,10 +708,20 @@
                 // Update each trade card with its result
                 if (data.results && Array.isArray(data.results)) {
                     data.results.forEach((result, index) => {
+                        let message = result.message || (result.success ? 'Order placed successfully' : 'Order failed');
+                        
+                        // Add debug info if available
+                        if (result.debug) {
+                            message += `\n\nDebug: ${result.debug}`;
+                        }
+                        if (result.error) {
+                            message += `\n\nError: ${result.error}`;
+                        }
+                        
                         updateTradeStatus(
                             index,
                             result.success,
-                            result.message || (result.success ? 'Order placed successfully' : 'Order failed'),
+                            message,
                             result.dealReference
                         );
                     });

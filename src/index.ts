@@ -1834,6 +1834,8 @@ function startHTTPServer(): Promise<HttpServer> {
           
           for (const trade of trades) {
             try {
+              console.error(`[DEBUG] Processing trade: ${JSON.stringify(trade, null, 2)}`);
+              
               // Map instrument name to epic
               let epic = trade.epic;
               if (!epic && trade.instrument) {
@@ -1912,7 +1914,18 @@ function startHTTPServer(): Promise<HttpServer> {
                 timeInForce: 'GOOD_TILL_CANCELLED' as const, // GTC for limit orders
               };
 
+              console.error(`[DEBUG] Order request for ${trade.instrument}:`, JSON.stringify(orderRequest, null, 2));
+              console.error(`[DEBUG] Account ID: ${accountId}`);
+              
               const result = await client.placeOrder(orderRequest, accountId);
+              
+              console.error(`[DEBUG] Order result for ${trade.instrument}:`, JSON.stringify({
+                success: result.success,
+                userMessage: result.userMessage,
+                error: result.error,
+                debug: result.debug,
+                data: result.data
+              }, null, 2));
               
               results.push({
                 success: result.success,
@@ -1921,12 +1934,18 @@ function startHTTPServer(): Promise<HttpServer> {
                   ? (result.data as any).dealReference 
                   : undefined,
                 error: result.error,
+                debug: result.debug ? JSON.stringify(result.debug) : undefined,
               });
             } catch (error) {
+              console.error(`[DEBUG] Exception placing order for ${trade.instrument}:`, error);
+              if (error instanceof Error) {
+                console.error(`[DEBUG] Error stack:`, error.stack);
+              }
               results.push({
                 success: false,
                 message: error instanceof Error ? error.message : 'Unknown error',
                 error: String(error),
+                debug: error instanceof Error ? error.stack : undefined,
               });
             }
           }
