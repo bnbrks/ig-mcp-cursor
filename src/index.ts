@@ -1626,15 +1626,21 @@ function startHTTPServer(): Promise<HttpServer> {
         });
         
         const [fields, files] = await form.parse(req);
-        const file = Array.isArray(files.image) ? files.image[0] : files.image;
+        const fileArray = files.image;
         
-        if (!file || !file[0]) {
+        if (!fileArray || (Array.isArray(fileArray) && fileArray.length === 0) || (!Array.isArray(fileArray) && !fileArray)) {
           res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
           res.end(JSON.stringify({ error: 'No image file provided' }));
           return;
         }
 
-        const fileObj = file[0];
+        const fileObj = Array.isArray(fileArray) ? fileArray[0] : fileArray;
+        if (!fileObj || !fileObj.filepath) {
+          res.writeHead(400, { 'Content-Type': 'application/json', ...corsHeaders });
+          res.end(JSON.stringify({ error: 'Invalid file upload' }));
+          return;
+        }
+
         const imageBuffer = readFileSync(fileObj.filepath);
         const base64Image = imageBuffer.toString('base64');
 
