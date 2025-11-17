@@ -1525,11 +1525,18 @@ function startHTTPServer(): Promise<HttpServer> {
           
           // For web requests, try to find an authenticated connection or authenticate with header
           const originalConnectionId = currentConnectionId;
+          let connectionIdToUse = originalConnectionId;
           
           // If API key is provided in header, authenticate first
           if (apiKeyHeader && MCP_SERVER_API_KEY) {
             const webConnectionId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            connectionIdToUse = webConnectionId;
             currentConnectionId = webConnectionId;
+            
+            // Ensure we have a client for this connection
+            if (!clients.has(webConnectionId)) {
+              clients.set(webConnectionId, new IGClient(API_KEY, API_URL));
+            }
             
             // Authenticate with the provided API key
             const authResult = await executeToolCall('mcp_authenticate', {
@@ -1538,15 +1545,27 @@ function startHTTPServer(): Promise<HttpServer> {
             
             if (authResult && typeof authResult === 'object' && 'isError' in authResult && authResult.isError) {
               // Authentication failed, try to find existing authenticated connection
+              console.error(`[DEBUG] Header auth failed, trying to find existing connection`);
+              connectionIdToUse = originalConnectionId;
               currentConnectionId = originalConnectionId;
             } else {
-              console.error(`[DEBUG] Authenticated with API key header, connection: ${webConnectionId}`);
+              console.error(`[DEBUG] Authenticated with API key header, connection: ${webConnectionId}, authenticated: ${isConnectionAuthenticated(webConnectionId)}`);
+              // Also auto-login to IG if credentials are available
+              if (API_KEY && USERNAME && PASSWORD) {
+                try {
+                  await executeToolCall('ig_login', {});
+                  console.error(`[DEBUG] Auto-logged into IG for connection: ${webConnectionId}`);
+                } catch (igError) {
+                  console.error(`[DEBUG] Auto-login to IG failed:`, igError);
+                }
+              }
             }
           } else {
             // Try to find an authenticated connection
             if (!isConnectionAuthenticated(currentConnectionId)) {
               for (const [connId, session] of SessionManager.getAllSessions()) {
                 if (session && session.authenticated && isConnectionAuthenticated(connId)) {
+                  connectionIdToUse = connId;
                   currentConnectionId = connId;
                   console.error(`[DEBUG] Using authenticated connection: ${connId}`);
                   break;
@@ -1554,6 +1573,9 @@ function startHTTPServer(): Promise<HttpServer> {
               }
             }
           }
+          
+          // Set the connection ID for this request
+          currentConnectionId = connectionIdToUse;
           
           const response = await handleMCPRequest(body);
           
