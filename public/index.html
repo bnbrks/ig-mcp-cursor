@@ -146,6 +146,26 @@
             color: #667eea;
         }
         
+        .size-input {
+            width: 100px;
+            padding: 6px 10px;
+            border: 2px solid #e0e4ff;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        
+        .size-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .size-label {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
         .actions {
             display: flex;
             gap: 15px;
@@ -238,11 +258,12 @@
             <div class="upload-section" id="uploadSection">
                 <div class="upload-icon">📸</div>
                 <h2>Upload Trade Screenshot</h2>
-                <p style="margin: 15px 0; color: #666;">Drag and drop an image or click to browse</p>
+                <p style="margin: 15px 0; color: #666;">Drag and drop an image, paste from clipboard (Ctrl+V/Cmd+V), or click to browse</p>
                 <input type="file" id="fileInput" accept="image/*">
                 <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
                     Choose Image
                 </button>
+                <p style="margin-top: 10px; font-size: 14px; color: #999;">Or press Ctrl+V (Cmd+V on Mac) to paste from clipboard</p>
             </div>
             
             <div class="preview-section" id="previewSection">
@@ -291,6 +312,23 @@
             const file = e.target.files[0];
             if (file) {
                 handleFile(file);
+            }
+        });
+        
+        // Clipboard paste handler
+        document.addEventListener('paste', async (e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            
+            for (let item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    if (blob) {
+                        handleFile(blob);
+                    }
+                    break;
+                }
             }
         });
         
@@ -389,10 +427,22 @@
                     <div class="trade-details">
                         <div class="trade-detail"><strong>Instrument:</strong> ${trade.instrument || 'N/A'}</div>
                         <div class="trade-detail"><strong>Direction:</strong> ${trade.direction || 'N/A'}</div>
-                        <div class="trade-detail"><strong>Size:</strong> ${trade.size || 'N/A'}</div>
                         <div class="trade-detail"><strong>Order Type:</strong> ${trade.orderType || 'MARKET'}</div>
+                        ${trade.entry ? `<div class="trade-detail"><strong>Entry:</strong> ${trade.entry}</div>` : ''}
+                        ${trade.stopLevel ? `<div class="trade-detail"><strong>Stop Level:</strong> ${trade.stopLevel}</div>` : ''}
+                        ${trade.targetPrice ? `<div class="trade-detail"><strong>Target Price:</strong> ${trade.targetPrice}</div>` : ''}
                         ${trade.expiry ? `<div class="trade-detail"><strong>Expiry:</strong> ${trade.expiry}</div>` : ''}
                         ${trade.currencyCode ? `<div class="trade-detail"><strong>Currency:</strong> ${trade.currencyCode}</div>` : ''}
+                    </div>
+                    <div class="size-label">
+                        <strong>Size (£ per point):</strong>
+                        <input type="number" 
+                               class="size-input" 
+                               id="size-${index}" 
+                               value="${trade.size || '0.01'}" 
+                               step="0.01" 
+                               min="0.01"
+                               onchange="updateTradeSize(${index}, this.value)">
                     </div>
                 `;
                 tradesList.appendChild(tradeCard);
@@ -401,8 +451,22 @@
             tradesSection.classList.add('active');
         }
         
+        function updateTradeSize(index, value) {
+            if (parsedTrades[index]) {
+                parsedTrades[index].size = parseFloat(value) || 0.01;
+            }
+        }
+        
         async function placeTrades() {
             if (parsedTrades.length === 0) return;
+            
+            // Update sizes from input fields
+            parsedTrades.forEach((trade, index) => {
+                const sizeInput = document.getElementById(`size-${index}`);
+                if (sizeInput) {
+                    trade.size = parseFloat(sizeInput.value) || 0.01;
+                }
+            });
             
             document.getElementById('confirmBtn').disabled = true;
             loadingSection.style.display = 'block';

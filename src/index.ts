@@ -1666,17 +1666,23 @@ function startHTTPServer(): Promise<HttpServer> {
           messages: [
             {
               role: 'system',
-              content: `You are a trading assistant. Analyze the screenshot and extract trade information. 
+              content: `You are a trading assistant. Analyze the screenshot and extract trade information from the table.
+              
+              The table typically has columns: Instrument, Long/Short, Entry, Stop Level, Target Price, Confidence
+              
               Return a JSON array of trades, where each trade has:
-              - instrument: The trading instrument name (e.g., "FTSE", "EUR/USD", "Apple")
-              - direction: "BUY" or "SELL"
-              - size: The trade size (number)
-              - orderType: "MARKET" or "LIMIT" (default to "MARKET")
-              - expiry: Optional expiry if it's a daily/futures contract (e.g., "DFB" for daily funded bets)
-              - currencyCode: Optional currency code (e.g., "GBP", "USD")
+              - instrument: The trading instrument name (e.g., "FTSE100", "FTSE", "Gold", "SP500", "Dax", "EUR/USD")
+              - direction: "BUY" for LONG, "SELL" for SHORT
+              - entry: The entry price (number, from Entry column)
+              - stopLevel: The stop loss level (number, from Stop Level column)
+              - targetPrice: The target/take profit price (number, from Target Price column - extract just the number, ignore "+" or "or lower" text)
+              - size: Default trade size (use 0.01 as default, user will edit this)
+              - orderType: "MARKET" (default)
+              - expiry: "DFB" for daily funded bets (default for indices)
+              - currencyCode: "GBP" for UK indices, "USD" for US indices (default "GBP")
               
               Return ONLY valid JSON, no other text. Example format:
-              [{"instrument": "FTSE", "direction": "BUY", "size": 0.01, "orderType": "MARKET", "expiry": "DFB", "currencyCode": "GBP"}]`
+              [{"instrument": "FTSE100", "direction": "BUY", "entry": 9610, "stopLevel": 9593, "targetPrice": 9750, "size": 0.01, "orderType": "MARKET", "expiry": "DFB", "currencyCode": "GBP"}]`
             },
             {
               role: 'user',
@@ -1767,6 +1773,11 @@ function startHTTPServer(): Promise<HttpServer> {
                   'FTSE 100': 'IX.D.FTSE.DAILY.IP',
                   'FTSE100': 'IX.D.FTSE.DAILY.IP',
                   'FTSE 100 DAILY': 'IX.D.FTSE.DAILY.IP',
+                  'GOLD': 'CS.D.XAUUSD.CFD.IP',
+                  'SP500': 'IX.D.SPTRD.DAILY.IP',
+                  'S&P 500': 'IX.D.SPTRD.DAILY.IP',
+                  'SPX': 'IX.D.SPTRD.DAILY.IP',
+                  'DAX': 'IX.D.DAX.DAILY.IP',
                 };
                 epic = instrumentMap[instrumentUpper];
                 
@@ -1797,13 +1808,29 @@ function startHTTPServer(): Promise<HttpServer> {
                 throw new Error(`No epic found for instrument: ${trade.instrument}`);
               }
 
+              // Parse stop level and target price
+              let stopLevel: number | undefined;
+              let limitLevel: number | undefined;
+              
+              if (trade.stopLevel) {
+                stopLevel = typeof trade.stopLevel === 'number' ? trade.stopLevel : parseFloat(String(trade.stopLevel));
+              }
+              
+              if (trade.targetPrice) {
+                // Extract number from target price (handle "+" or "or lower" text)
+                const targetStr = String(trade.targetPrice).replace(/[^0-9.-]/g, '');
+                limitLevel = parseFloat(targetStr);
+              }
+
               const orderRequest = {
                 epic: epic,
                 expiry: trade.expiry || 'DFB',
                 direction: trade.direction,
-                size: parseFloat(trade.size),
+                size: parseFloat(trade.size) || 0.01,
                 orderType: trade.orderType || 'MARKET',
                 currencyCode: trade.currencyCode || 'GBP',
+                stopLevel: stopLevel,
+                limitLevel: limitLevel,
               };
 
               const result = await client.placeOrder(orderRequest, accountId);
