@@ -121,11 +121,47 @@
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        
+        .trade-card.success {
+            border-color: #cfc;
+            background: #f0fff0;
+        }
+        
+        .trade-card.error {
+            border-color: #fcc;
+            background: #fff0f0;
         }
         
         .trade-card h3 {
             color: #667eea;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .trade-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        
+        .trade-status.pending {
+            background: #e0e4ff;
+            color: #667eea;
+        }
+        
+        .trade-status.success {
+            background: #cfc;
+            color: #3c3;
+        }
+        
+        .trade-status.error {
+            background: #fcc;
+            color: #c33;
         }
         
         .trade-details {
@@ -137,13 +173,32 @@
         
         .trade-detail {
             background: white;
-            padding: 8px 12px;
+            padding: 10px 12px;
             border-radius: 6px;
             font-size: 14px;
+            border-left: 3px solid #667eea;
         }
         
         .trade-detail strong {
             color: #667eea;
+            display: block;
+            margin-bottom: 4px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        
+        .trade-detail .value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .direction-buy {
+            color: #3c3;
+        }
+        
+        .direction-sell {
+            color: #c33;
         }
         
         .size-input {
@@ -519,17 +574,41 @@
             trades.forEach((trade, index) => {
                 const tradeCard = document.createElement('div');
                 tradeCard.className = 'trade-card';
+                tradeCard.id = `trade-card-${index}`;
+                const direction = trade.direction || 'N/A';
+                const directionClass = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
+                const directionIcon = direction === 'BUY' ? '📈' : '📉';
+                
                 tradeCard.innerHTML = `
-                    <h3>Trade ${index + 1}</h3>
+                    <h3>
+                        <span>${directionIcon} Trade ${index + 1}: ${trade.instrument || 'N/A'}</span>
+                        <span class="trade-status pending" id="status-${index}">Pending</span>
+                    </h3>
                     <div class="trade-details">
-                        <div class="trade-detail"><strong>Instrument:</strong> ${trade.instrument || 'N/A'}</div>
-                        <div class="trade-detail"><strong>Direction:</strong> ${trade.direction || 'N/A'}</div>
-                        <div class="trade-detail"><strong>Order Type:</strong> ${trade.orderType || 'MARKET'}</div>
-                        ${trade.entry ? `<div class="trade-detail"><strong>Entry:</strong> ${trade.entry}</div>` : ''}
-                        ${trade.stopLevel ? `<div class="trade-detail"><strong>Stop Level:</strong> ${trade.stopLevel}</div>` : ''}
-                        ${trade.targetPrice ? `<div class="trade-detail"><strong>Target Price:</strong> ${trade.targetPrice}</div>` : ''}
-                        ${trade.expiry ? `<div class="trade-detail"><strong>Expiry:</strong> ${trade.expiry}</div>` : ''}
-                        ${trade.currencyCode ? `<div class="trade-detail"><strong>Currency:</strong> ${trade.currencyCode}</div>` : ''}
+                        <div class="trade-detail">
+                            <strong>Direction</strong>
+                            <span class="value ${directionClass}">${direction}</span>
+                        </div>
+                        <div class="trade-detail">
+                            <strong>Entry Price</strong>
+                            <span class="value">${trade.entry || 'N/A'}</span>
+                        </div>
+                        <div class="trade-detail">
+                            <strong>Stop Loss</strong>
+                            <span class="value">${trade.stopLevel || 'N/A'}</span>
+                        </div>
+                        <div class="trade-detail">
+                            <strong>Take Profit</strong>
+                            <span class="value">${trade.targetPrice || 'N/A'}</span>
+                        </div>
+                        <div class="trade-detail">
+                            <strong>Order Type</strong>
+                            <span class="value">LIMIT</span>
+                        </div>
+                        <div class="trade-detail">
+                            <strong>Currency</strong>
+                            <span class="value">GBP</span>
+                        </div>
                     </div>
                     <div class="size-label">
                         <strong>Size (£ per point):</strong>
@@ -541,11 +620,42 @@
                                min="0.01"
                                onchange="updateTradeSize(${index}, this.value)">
                     </div>
+                    <div id="result-${index}" style="margin-top: 15px;"></div>
                 `;
                 tradesList.appendChild(tradeCard);
             });
             
             tradesSection.classList.add('active');
+        }
+        
+        function updateTradeStatus(index, success, message, dealReference) {
+            const statusEl = document.getElementById(`status-${index}`);
+            const cardEl = document.getElementById(`trade-card-${index}`);
+            const resultEl = document.getElementById(`result-${index}`);
+            
+            if (statusEl) {
+                statusEl.className = `trade-status ${success ? 'success' : 'error'}`;
+                statusEl.textContent = success ? 'Success' : 'Failed';
+            }
+            
+            if (cardEl) {
+                cardEl.classList.remove('success', 'error');
+                cardEl.classList.add(success ? 'success' : 'error');
+            }
+            
+            if (resultEl) {
+                const icon = success ? '✅' : '❌';
+                const bgColor = success ? '#efe' : '#fee';
+                const borderColor = success ? '#cfc' : '#fcc';
+                const textColor = success ? '#3c3' : '#c33';
+                
+                resultEl.innerHTML = `
+                    <div style="background: ${bgColor}; border: 2px solid ${borderColor}; color: ${textColor}; padding: 10px; border-radius: 6px; font-size: 14px;">
+                        ${icon} <strong>${message}</strong>
+                        ${dealReference ? `<br><small>Deal Reference: ${dealReference}</small>` : ''}
+                    </div>
+                `;
+            }
         }
         
         function updateTradeSize(index, value) {
@@ -592,16 +702,29 @@
                     throw new Error(data.error || 'Failed to place trades');
                 }
                 
-                const successMsg = document.createElement('div');
-                successMsg.className = 'success';
-                successMsg.innerHTML = `
-                    <h3>✅ Trades Placed Successfully!</h3>
-                    <p>${data.results.length} trade(s) processed:</p>
-                    <ul style="margin-top: 10px; padding-left: 20px;">
-                        ${data.results.map(r => `<li>${r.success ? '✅' : '❌'} ${r.message} ${r.dealReference ? `(Ref: ${r.dealReference})` : ''}</li>`).join('')}
-                    </ul>
+                // Update each trade card with its result
+                if (data.results && Array.isArray(data.results)) {
+                    data.results.forEach((result, index) => {
+                        updateTradeStatus(
+                            index,
+                            result.success,
+                            result.message || (result.success ? 'Order placed successfully' : 'Order failed'),
+                            result.dealReference
+                        );
+                    });
+                }
+                
+                // Show summary
+                const successCount = data.results.filter(r => r.success).length;
+                const totalCount = data.results.length;
+                const summaryMsg = document.createElement('div');
+                summaryMsg.className = successCount === totalCount ? 'success' : 'error';
+                summaryMsg.innerHTML = `
+                    <h3>${successCount === totalCount ? '✅' : '⚠️'} Trade Placement Complete</h3>
+                    <p>${successCount} of ${totalCount} trade(s) placed successfully</p>
                 `;
-                successSection.appendChild(successMsg);
+                successSection.innerHTML = '';
+                successSection.appendChild(summaryMsg);
                 
             } catch (error) {
                 errorSection.innerHTML = `<div class="error">Error: ${error.message}</div>`;

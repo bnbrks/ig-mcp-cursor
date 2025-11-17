@@ -1879,9 +1879,14 @@ function startHTTPServer(): Promise<HttpServer> {
                 throw new Error(`No epic found for instrument: ${trade.instrument}`);
               }
 
-              // Parse stop level and target price
+              // Parse entry, stop level and target price
+              let entryLevel: number | undefined;
               let stopLevel: number | undefined;
               let limitLevel: number | undefined;
+              
+              if (trade.entry) {
+                entryLevel = typeof trade.entry === 'number' ? trade.entry : parseFloat(String(trade.entry));
+              }
               
               if (trade.stopLevel) {
                 stopLevel = typeof trade.stopLevel === 'number' ? trade.stopLevel : parseFloat(String(trade.stopLevel));
@@ -1893,15 +1898,18 @@ function startHTTPServer(): Promise<HttpServer> {
                 limitLevel = parseFloat(targetStr);
               }
 
+              // Use LIMIT order at entry price, not MARKET
               const orderRequest = {
                 epic: epic,
                 expiry: trade.expiry || 'DFB',
                 direction: trade.direction,
                 size: parseFloat(trade.size) || 0.01,
-                orderType: trade.orderType || 'MARKET',
-                currencyCode: trade.currencyCode || 'GBP',
+                orderType: 'LIMIT', // Always use LIMIT order
+                level: entryLevel, // Entry price for limit order
+                currencyCode: 'GBP', // Always use GBP
                 stopLevel: stopLevel,
-                limitLevel: limitLevel,
+                limitLevel: limitLevel, // Take profit level
+                timeInForce: 'GOOD_TILL_CANCELLED', // GTC for limit orders
               };
 
               const result = await client.placeOrder(orderRequest, accountId);
