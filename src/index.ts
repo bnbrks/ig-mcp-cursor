@@ -1545,15 +1545,39 @@ function startHTTPServer(): Promise<HttpServer> {
 
   return new Promise((resolve, reject) => {
     httpServer.listen(port, '0.0.0.0', () => {
+      const address = httpServer.address();
       console.error(`IG MCP Server running on HTTP port ${port}`);
+      console.error(`Server address: ${JSON.stringify(address)}`);
       console.error(`MCP endpoint: http://0.0.0.0:${port}/mcp`);
       console.error(`Health check: http://0.0.0.0:${port}/health`);
+      console.error(`Environment PORT: ${process.env.PORT || 'not set'}`);
+      console.error(`Listening on: 0.0.0.0:${port}`);
+      
+      // Verify server is actually listening
+      if (httpServer.listening) {
+        console.error('✓ Server is confirmed listening');
+      } else {
+        console.error('✗ WARNING: Server reports it is NOT listening!');
+      }
+      
       resolve(httpServer);
     });
 
     httpServer.on('error', (error: Error) => {
       console.error('HTTP server error:', error);
+      console.error('Error details:', {
+        code: (error as any).code,
+        errno: (error as any).errno,
+        syscall: (error as any).syscall,
+        address: (error as any).address,
+        port: (error as any).port,
+      });
       reject(error);
+    });
+    
+    // Log when server closes
+    httpServer.on('close', () => {
+      console.error('HTTP server closed');
     });
   });
 }
@@ -1613,6 +1637,21 @@ async function main() {
     // Log that we're ready
     console.error('Server started successfully, waiting for requests...');
     console.error('Process will stay alive as long as HTTP server is running');
+    console.error(`Server listening status: ${httpServer.listening}`);
+    console.error(`Server address: ${JSON.stringify(httpServer.address())}`);
+    
+    // Periodic heartbeat to confirm server is still alive
+    const heartbeat = setInterval(() => {
+      console.error(`[${new Date().toISOString()}] Heartbeat - Server still alive, listening: ${httpServer.listening}`);
+    }, 30000); // Every 30 seconds
+    
+    // Clear heartbeat on shutdown
+    process.on('SIGTERM', () => {
+      clearInterval(heartbeat);
+    });
+    process.on('SIGINT', () => {
+      clearInterval(heartbeat);
+    });
 
     // Ensure we don't exit
     process.on('beforeExit', (code) => {
