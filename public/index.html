@@ -955,48 +955,7 @@
             output.className = 'json-output';
             
             try {
-                // If user is logged in, get the stored API key and authenticate first
-                const storedApiKey = document.getElementById('apiKey')?.value;
-                
-                // If this is not an mcp_authenticate call and we have an API key, authenticate first
-                if (requestData.params?.name !== 'mcp_authenticate' && storedApiKey && isAuthenticated) {
-                    // Authenticate with MCP server first
-                    const authRequest = {
-                        jsonrpc: "2.0",
-                        id: 0,
-                        method: "tools/call",
-                        params: {
-                            name: "mcp_authenticate",
-                            arguments: {
-                                apiKey: storedApiKey
-                            }
-                        }
-                    };
-                    
-                    try {
-                        const authResponse = await fetch('/mcp', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(authRequest)
-                        });
-                        const authData = await authResponse.json();
-                        
-                        if (authData.result?.isError) {
-                            output.textContent = `Authentication failed. Please login first.\n\n${JSON.stringify(authData, null, 2)}`;
-                            output.className = 'json-output error';
-                            btn.disabled = false;
-                            btn.textContent = 'Execute API Call';
-                            return;
-                        }
-                    } catch (authError) {
-                        console.error('Auth error:', authError);
-                        // Continue anyway, might work if already authenticated
-                    }
-                }
-                
-                // Now make the actual API call
+                // Make the API call - server will automatically use authenticated connection
                 const response = await fetch('/mcp', {
                     method: 'POST',
                     headers: {
