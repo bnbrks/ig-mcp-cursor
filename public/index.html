@@ -977,23 +977,95 @@
                     const jsonText = data.json || data.response || JSON.stringify(data);
                     // Try to find JSON in the text (handle markdown code blocks)
                     const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+                    let parsedJson;
                     if (jsonMatch) {
-                        jsonRequest = JSON.parse(jsonMatch[0]);
+                        parsedJson = JSON.parse(jsonMatch[0]);
                     } else {
-                        jsonRequest = JSON.parse(jsonText);
+                        parsedJson = JSON.parse(jsonText);
                     }
-                } catch (parseError) {
-                    // If parsing fails, try to construct a basic request
-                    jsonRequest = {
-                        jsonrpc: "2.0",
-                        id: 1,
-                        method: "tools/call",
-                        params: {
-                            name: "ig_get_accounts",
-                            arguments: {}
+                    
+                    // Validate and fix the structure
+                    if (parsedJson.jsonrpc && parsedJson.method && parsedJson.params) {
+                        // Already in correct format
+                        jsonRequest = parsedJson;
+                    } else if (parsedJson.params && parsedJson.params.name) {
+                        // Has params but missing wrapper
+                        jsonRequest = {
+                            jsonrpc: "2.0",
+                            id: 1,
+                            method: "tools/call",
+                            params: parsedJson.params
+                        };
+                    } else if (parsedJson.name || parsedJson.epic) {
+                        // Just the arguments, need to wrap
+                        jsonRequest = {
+                            jsonrpc: "2.0",
+                            id: 1,
+                            method: "tools/call",
+                            params: {
+                                name: parsedJson.name || "ig_place_order",
+                                arguments: parsedJson
+                            }
+                        };
+                    } else {
+                        // Try to infer from content
+                        jsonRequest = {
+                            jsonrpc: "2.0",
+                            id: 1,
+                            method: "tools/call",
+                            params: {
+                                name: "ig_place_order",
+                                arguments: parsedJson
+                            }
+                        };
+                    }
+                    
+                    // Fix common issues in the generated JSON
+                    if (jsonRequest.params && jsonRequest.params.arguments) {
+                        const args = jsonRequest.params.arguments;
+                        
+                        // Fix epic names
+                        if (args.epic) {
+                            const epicMap = {
+                                'FTSE': 'IX.D.FTSE.DAILY.IP',
+                                'FTSE100': 'IX.D.FTSE.DAILY.IP',
+                                'FTSE_DFB': 'IX.D.FTSE.DAILY.IP',
+                                'FTSE 100': 'IX.D.FTSE.DAILY.IP',
+                                'GOLD': 'CS.D.XAUUSD.CFD.IP',
+                                'SP500': 'IX.D.SPTRD.DAILY.IP',
+                                'S&P 500': 'IX.D.SPTRD.DAILY.IP',
+                                'DAX': 'IX.D.DAX.DAILY.IP'
+                            };
+                            const upperEpic = args.epic.toUpperCase();
+                            if (epicMap[upperEpic]) {
+                                args.epic = epicMap[upperEpic];
+                            }
                         }
-                    };
-                    jsonInput.value = `Error parsing AI response. Please try again or enter JSON manually.\n\nAI Response: ${data.json || data.response || JSON.stringify(data)}`;
+                        
+                        // Fix expiry - if it's a date string, convert to DFB for daily instruments
+                        if (args.expiry && args.expiry.includes('T') || args.expiry.includes('-')) {
+                            // It's a date, but for daily instruments we should use DFB
+                            if (args.epic && args.epic.includes('.DAILY.')) {
+                                args.expiry = 'DFB';
+                            }
+                        } else if (!args.expiry && args.epic && args.epic.includes('.DAILY.')) {
+                            // Missing expiry for daily instrument
+                            args.expiry = 'DFB';
+                        }
+                        
+                        // Ensure currencyCode is GBP
+                        if (!args.currencyCode) {
+                            args.currencyCode = 'GBP';
+                        }
+                        
+                        // Ensure orderType is set for orders
+                        if (jsonRequest.params.name === 'ig_place_order' && !args.orderType) {
+                            args.orderType = args.level ? 'LIMIT' : 'MARKET';
+                        }
+                    }
+                    
+                } catch (parseError) {
+                    jsonInput.value = `Error parsing AI response: ${parseError.message}\n\nPlease try again or enter JSON manually.\n\nAI Response: ${data.json || data.response || JSON.stringify(data)}`;
                     return;
                 }
                 

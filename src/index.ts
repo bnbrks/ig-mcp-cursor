@@ -1872,19 +1872,30 @@ function startHTTPServer(): Promise<HttpServer> {
                 content: `You are a helpful assistant that generates JSON-RPC requests for the IG.com trading API.
 
 Available tools:
-- ig_get_accounts: Get all accounts (no arguments)
-- ig_get_working_orders: Get all working/limit orders (no arguments)
-- ig_get_open_positions: Get all open positions (no arguments)
-- ig_get_positions: Get all positions (no arguments)
-- ig_search_instruments: Search for trading instruments (arguments: searchTerm: string)
-- ig_get_market_data: Get market data for an instrument (arguments: epic: string)
-- ig_place_order: Place a trading order (arguments: epic, direction: "BUY"|"SELL", size: number, orderType: "MARKET"|"LIMIT"|"STOP", level?: number, stopLevel?: number, limitLevel?: number, expiry?: string, currencyCode?: string)
-- ig_get_account_balance: Get account balance (arguments: accountId: string)
-- ig_close_position: Close a position (arguments: dealId: string, direction: "BUY"|"SELL", size: number)
-- ig_delete_working_order: Delete a working order (arguments: dealId: string)
-- ig_get_historical_prices: Get historical prices (arguments: epic: string, resolution: string, from: string, to: string, pageSize?: number)
-- ig_get_watchlists: Get watchlists (no arguments)
-- ig_get_watchlist_markets: Get markets in a watchlist (arguments: watchlistId: string)
+- ig_get_accounts: Get all accounts (arguments: {})
+- ig_get_working_orders: Get all working/limit orders (arguments: {})
+- ig_get_open_positions: Get all open positions (arguments: {})
+- ig_get_positions: Get all positions (arguments: {})
+- ig_search_instruments: Search for trading instruments (arguments: {searchTerm: string})
+- ig_get_market_data: Get market data for an instrument (arguments: {epic: string})
+- ig_place_order: Place a trading order (arguments: {epic: string, direction: "BUY"|"SELL", size: number, orderType: "MARKET"|"LIMIT"|"STOP", level?: number, stopLevel?: number, limitLevel?: number, expiry?: string, currencyCode?: string, accountId?: string})
+- ig_get_account_balance: Get account balance (arguments: {accountId: string})
+- ig_close_position: Close a position (arguments: {dealId: string, direction: "BUY"|"SELL", size: number})
+- ig_delete_working_order: Delete a working order (arguments: {dealId: string})
+- ig_get_historical_prices: Get historical prices (arguments: {epic: string, resolution: string, from: string, to: string, pageSize?: number})
+- ig_get_watchlists: Get watchlists (arguments: {})
+- ig_get_watchlist_markets: Get markets in a watchlist (arguments: {watchlistId: string})
+
+IMPORTANT RULES:
+1. For FTSE/FTSE100/FTSE 100, use epic: "IX.D.FTSE.DAILY.IP" and expiry: "DFB"
+2. For Gold, use epic: "CS.D.XAUUSD.CFD.IP"
+3. For SP500/S&P 500, use epic: "IX.D.SPTRD.DAILY.IP" and expiry: "DFB"
+4. For DAX, use epic: "IX.D.DAX.DAILY.IP" and expiry: "DFB"
+5. For daily spread bets, always use expiry: "DFB" (not a date)
+6. For limit orders, use orderType: "LIMIT" and include the level (entry price)
+7. Stop levels and limit levels are absolute prices, not distances
+8. Always use currencyCode: "GBP" for UK instruments
+9. Size is in £ per point for spread betting
 
 Return ONLY a valid JSON-RPC 2.0 request object. Format:
 {
