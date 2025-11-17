@@ -252,6 +252,89 @@
             color: #c33;
         }
         
+        .main-nav {
+            display: flex;
+            gap: 10px;
+            padding: 20px 30px 0;
+            background: white;
+            border-bottom: 2px solid #e0e4ff;
+        }
+        
+        .nav-btn {
+            background: transparent;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #667eea;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .nav-btn:hover {
+            background: #f8f9ff;
+        }
+        
+        .nav-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .api-test-section {
+            padding: 30px;
+        }
+        
+        .json-input {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #e0e4ff;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+        
+        .json-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .json-output {
+            width: 100%;
+            min-height: 300px;
+            padding: 15px;
+            border: 2px solid #e0e4ff;
+            border-radius: 8px;
+            background: #f8f9ff;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-x: auto;
+        }
+        
+        .json-output.error {
+            background: #fff0f0;
+            border-color: #fcc;
+            color: #c33;
+        }
+        
+        .json-output.success {
+            background: #f0fff0;
+            border-color: #cfc;
+        }
+        
         .actions {
             display: flex;
             gap: 15px;
@@ -340,7 +423,14 @@
             <p>Upload a screenshot of your trades and place them automatically</p>
         </div>
         
+        <nav class="main-nav">
+            <button class="nav-btn active" onclick="showPage('trade-parser')">Trade Parser</button>
+            <button class="nav-btn" onclick="showPage('api-test')">API Tester</button>
+        </nav>
+        
         <div class="content">
+            <!-- Trade Parser Page -->
+            <div class="page active" id="trade-parser-page">
             <!-- Login Section -->
             <div class="login-section" id="loginSection">
                 <h2>🔐 Server Authentication</h2>
@@ -396,6 +486,49 @@
                 <div class="actions">
                     <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
                     <button class="btn btn-primary" id="confirmBtn" onclick="placeTrades()">Confirm & Place Trades</button>
+                </div>
+            </div>
+            </div>
+            
+            <!-- API Tester Page -->
+            <div class="page" id="api-test-page">
+                <div class="api-test-section">
+                    <h2>🔧 API Tester</h2>
+                    <p style="margin-bottom: 20px; color: #666;">Test IG.com API calls directly. Enter a JSON-RPC request and execute it.</p>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">JSON Request:</label>
+                        <textarea 
+                            id="apiJsonInput" 
+                            class="json-input" 
+                            placeholder='{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "ig_get_working_orders",
+    "arguments": {}
+  }
+}'
+                        ></textarea>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <button class="btn btn-primary" onclick="executeApiCall()" id="executeApiBtn">
+                            Execute API Call
+                        </button>
+                        <button class="btn btn-secondary" onclick="loadExample('working_orders')" style="margin-left: 10px;">
+                            Load Example: Get Working Orders
+                        </button>
+                        <button class="btn btn-secondary" onclick="loadExample('accounts')" style="margin-left: 10px;">
+                            Load Example: Get Accounts
+                        </button>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; font-weight: 600;">Response:</label>
+                        <pre id="apiJsonOutput" class="json-output">Response will appear here...</pre>
+                    </div>
                 </div>
             </div>
         </div>
