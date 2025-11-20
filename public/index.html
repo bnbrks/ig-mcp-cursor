@@ -624,6 +624,71 @@
     <script>
         let currentImage = null;
         let parsedTrades = [];
+        let isAuthenticated = false;
+        
+        // Load settings on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+        });
+        
+        function getDefaultSize() {
+            return parseFloat(localStorage.getItem('defaultPositionSize') || '0.3');
+        }
+        
+        function loadSettings() {
+            const defaultSize = getDefaultSize();
+            const settingsInput = document.getElementById('settingsDefaultSize');
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            
+            if (settingsInput) {
+                settingsInput.value = defaultSize;
+            }
+            if (defaultSizeInput) {
+                defaultSizeInput.value = defaultSize;
+            }
+        }
+        
+        function saveSettings() {
+            const settingsInput = document.getElementById('settingsDefaultSize');
+            const defaultSize = parseFloat(settingsInput?.value || '0.3');
+            
+            localStorage.setItem('defaultPositionSize', defaultSize.toString());
+            
+            const statusEl = document.getElementById('settingsSaveStatus');
+            if (statusEl) {
+                statusEl.innerHTML = `<div style="padding: 10px; background: #d4edda; color: #155724; border-radius: 6px;">✓ Settings saved successfully!</div>`;
+                setTimeout(() => {
+                    statusEl.innerHTML = '';
+                }, 2000);
+            }
+            
+            // Update default size input on trade parser page
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            if (defaultSizeInput) {
+                defaultSizeInput.value = defaultSize;
+            }
+        }
+        
+        function applyDefaultSize() {
+            const defaultSize = parseFloat(document.getElementById('defaultSizeInput')?.value || '0.3');
+            
+            parsedTrades.forEach((trade, index) => {
+                trade.size = defaultSize;
+                const sizeInput = document.getElementById(`size-${index}`);
+                if (sizeInput) {
+                    sizeInput.value = defaultSize;
+                }
+            });
+        }
+        
+        function updateDefaultSize() {
+            // Just update the localStorage when default size changes
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            if (defaultSizeInput) {
+                const defaultSize = parseFloat(defaultSizeInput.value || '0.3');
+                localStorage.setItem('defaultPositionSize', defaultSize.toString());
+            }
+        }
         
         const fileInput = document.getElementById('fileInput');
         const uploadSection = document.getElementById('uploadSection');
