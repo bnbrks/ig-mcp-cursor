@@ -245,6 +245,10 @@ export class IGClient {
         (key) => payload[key as keyof typeof payload] === undefined && delete payload[key as keyof typeof payload]
       );
 
+      // Log the request payload for debugging
+      console.error('[IG API] Placing order with payload:', JSON.stringify(payload, null, 2));
+      console.error('[IG API] Account ID:', accountId);
+      
       const response = await this.axiosInstance.post('/positions/otc', payload, {
         headers: {
           Version: '2',
@@ -252,10 +256,31 @@ export class IGClient {
         },
       });
 
+      // Log the full response to help debug
+      console.error('[IG API] Order placement response:', JSON.stringify({
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data,
+        headers: response.headers,
+      }, null, 2));
+      
+      // Check if we actually got a deal reference or deal ID
+      const dealReference = response.data?.dealReference || response.data?.dealReferenceId;
+      const dealId = response.data?.dealId;
+      
+      if (!dealReference && !dealId) {
+        console.error('[IG API] WARNING: Order placement returned success but no deal reference or deal ID');
+        console.error('[IG API] Full response data:', JSON.stringify(response.data, null, 2));
+      }
+      
       return {
         success: true,
         data: response.data,
-        userMessage: `Order placed successfully. Deal reference: ${response.data.dealReference || 'N/A'}`,
+        userMessage: dealReference 
+          ? `Order placed successfully. Deal reference: ${dealReference}` 
+          : dealId
+          ? `Order placed successfully. Deal ID: ${dealId}`
+          : `Order accepted but no deal reference received. Response: ${JSON.stringify(response.data)}`,
       };
     } catch (error) {
       return this.handleError<unknown>(error, 'Failed to place order');
