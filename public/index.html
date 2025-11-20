@@ -1131,48 +1131,91 @@
                             const statusCell = document.getElementById(`status-cell-${index}`);
                             
                             if (statusCell) {
+                                // Always show full debug info
+                                let fullDebugInfo = '';
+                                
+                                // Build comprehensive debug info
+                                if (result.debug) {
+                                    try {
+                                        const debugObj = typeof result.debug === 'string' ? JSON.parse(result.debug) : result.debug;
+                                        if (typeof debugObj === 'object' && debugObj !== null) {
+                                            fullDebugInfo += '<div style="margin-top: 8px; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 10px; max-height: 150px; overflow-y: auto;">';
+                                            fullDebugInfo += '<strong>Debug Info:</strong><br>';
+                                            fullDebugInfo += '<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0;">' + JSON.stringify(debugObj, null, 2) + '</pre>';
+                                            fullDebugInfo += '</div>';
+                                        } else {
+                                            fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #666;">Debug: ' + String(result.debug) + '</div>';
+                                        }
+                                    } catch (e) {
+                                        fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #666;">Debug: ' + String(result.debug) + '</div>';
+                                    }
+                                }
+                                
+                                if (result.error) {
+                                    try {
+                                        const errorObj = typeof result.error === 'string' ? JSON.parse(result.error) : result.error;
+                                        if (typeof errorObj === 'object' && errorObj !== null) {
+                                            fullDebugInfo += '<div style="margin-top: 8px; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 10px;">';
+                                            fullDebugInfo += '<strong>Error Details:</strong><br>';
+                                            fullDebugInfo += '<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0;">' + JSON.stringify(errorObj, null, 2) + '</pre>';
+                                            fullDebugInfo += '</div>';
+                                        } else {
+                                            fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #dc3545;">Error: ' + String(result.error) + '</div>';
+                                        }
+                                    } catch (e) {
+                                        fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #dc3545;">Error: ' + String(result.error) + '</div>';
+                                    }
+                                }
+                                
+                                // Show raw result data if available
+                                if (result.data) {
+                                    try {
+                                        const dataObj = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+                                        if (typeof dataObj === 'object' && dataObj !== null) {
+                                            fullDebugInfo += '<div style="margin-top: 8px; padding: 8px; background: #e7f3ff; border: 1px solid #0d6efd; border-radius: 4px; font-size: 10px;">';
+                                            fullDebugInfo += '<strong>Response Data:</strong><br>';
+                                            fullDebugInfo += '<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0;">' + JSON.stringify(dataObj, null, 2) + '</pre>';
+                                            fullDebugInfo += '</div>';
+                                        }
+                                    } catch (e) {
+                                        // Ignore parsing errors
+                                    }
+                                }
+                                
                                 if (result.success) {
-                                    statusCell.innerHTML = `
-                                        <div style="color: #28a745; font-weight: 600;">✓ Placed</div>
-                                        ${result.dealReference ? `<div style="font-size: 11px; color: #666; margin-top: 4px;">Ref: ${result.dealReference}</div>` : ''}
-                                    `;
-                                    statusCell.style.color = '#28a745';
+                                    // Check if we have a dealReference or dealId to confirm it was actually placed
+                                    const dealRef = result.dealReference || (result.data && typeof result.data === 'object' && 'dealReference' in result.data ? result.data.dealReference : null);
+                                    const dealId = result.data && typeof result.data === 'object' && 'dealId' in result.data ? result.data.dealId : null;
+                                    
+                                    if (dealRef || dealId) {
+                                        statusCell.innerHTML = `
+                                            <div style="color: #28a745; font-weight: 600;">✓ Placed</div>
+                                            <div style="font-size: 11px; color: #666; margin-top: 4px;">
+                                                ${dealRef ? `Ref: ${dealRef}<br>` : ''}
+                                                ${dealId ? `ID: ${dealId}` : ''}
+                                            </div>
+                                            ${fullDebugInfo}
+                                        `;
+                                        statusCell.style.color = '#28a745';
+                                    } else {
+                                        // Success but no deal reference - might be pending or incomplete
+                                        statusCell.innerHTML = `
+                                            <div style="color: #ffc107; font-weight: 600;">⚠ Pending</div>
+                                            <div style="font-size: 11px; color: #856404; margin-top: 4px;">
+                                                ${result.message || 'Order accepted but no deal reference received'}
+                                            </div>
+                                            ${fullDebugInfo}
+                                        `;
+                                        statusCell.style.color = '#856404';
+                                    }
                                 } else {
-                                    // Show error with debug summary
-                                    let errorMessage = result.message || 'Order failed';
-                                    let debugInfo = '';
-                                    
-                                    if (result.error) {
-                                        try {
-                                            const errorObj = typeof result.error === 'string' ? JSON.parse(result.error) : result.error;
-                                            if (errorObj.errorCode) {
-                                                debugInfo += `Error: ${errorObj.errorCode}<br>`;
-                                            }
-                                        } catch (e) {
-                                            debugInfo += `Error: ${result.error}<br>`;
-                                        }
-                                    }
-                                    
-                                    if (result.debug) {
-                                        try {
-                                            const debugObj = typeof result.debug === 'string' ? JSON.parse(result.debug) : result.debug;
-                                            if (debugObj.response && debugObj.response.errorCode) {
-                                                debugInfo += `Code: ${debugObj.response.errorCode}<br>`;
-                                            }
-                                            if (debugObj.status) {
-                                                debugInfo += `Status: ${debugObj.status}`;
-                                            }
-                                        } catch (e) {
-                                            debugInfo += result.debug;
-                                        }
-                                    }
-                                    
+                                    // Show error with full debug
                                     statusCell.innerHTML = `
                                         <div style="color: #dc3545; font-weight: 600;">✗ Failed</div>
-                                        <div style="font-size: 11px; color: #dc3545; margin-top: 4px; max-width: 200px;">
-                                            ${errorMessage}
-                                            ${debugInfo ? `<br><br><strong>Debug:</strong><br>${debugInfo}` : ''}
+                                        <div style="font-size: 11px; color: #dc3545; margin-top: 4px; max-width: 300px;">
+                                            <strong>${result.message || 'Order failed'}</strong>
                                         </div>
+                                        ${fullDebugInfo}
                                     `;
                                     statusCell.style.color = '#dc3545';
                                 }

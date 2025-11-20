@@ -1772,8 +1772,9 @@ function startHTTPServer(): Promise<HttpServer> {
         }
 
         // Use OpenAI Vision API to parse the image
+        // Using gpt-4o-mini for fastest vision-capable model (o1/o3 models don't support vision/images)
         const completion = await openai.chat.completions.create({
-          model: 'gpt-4o',
+          model: 'gpt-4o-mini',
           messages: [
             {
               role: 'system',
@@ -2086,14 +2087,37 @@ Do not include any explanation, just the JSON object.`
                 data: result.data
               }, null, 2));
               
+              // Extract deal reference and deal ID from response
+              let dealReference: string | undefined;
+              let dealId: string | undefined;
+              
+              if (result.data && typeof result.data === 'object') {
+                const responseData = result.data as any;
+                dealReference = responseData.dealReference || responseData.dealReferenceId;
+                dealId = responseData.dealId;
+                
+                // Log what we found
+                console.error(`[DEBUG] Extracted from response - dealReference: ${dealReference}, dealId: ${dealId}`);
+                console.error(`[DEBUG] Full response data:`, JSON.stringify(responseData, null, 2));
+              }
+              
+              // Only mark as success if we have a deal reference or deal ID
+              const actuallyPlaced = result.success && (dealReference || dealId);
+              
               results.push({
-                success: result.success,
-                message: result.userMessage || (result.success ? 'Order placed' : 'Order failed'),
-                dealReference: result.data && typeof result.data === 'object' && 'dealReference' in result.data 
-                  ? (result.data as any).dealReference 
-                  : undefined,
+                success: actuallyPlaced,
+                message: result.userMessage || (actuallyPlaced ? 'Order placed successfully' : 'Order failed or pending'),
+                dealReference: dealReference,
+                dealId: dealId,
                 error: result.error,
-                debug: result.debug ? JSON.stringify(result.debug) : undefined,
+                debug: result.debug ? (typeof result.debug === 'string' ? result.debug : JSON.stringify(result.debug)) : undefined,
+                data: result.data ? (typeof result.data === 'string' ? result.data : JSON.stringify(result.data)) : undefined,
+                rawResult: JSON.stringify({
+                  success: result.success,
+                  userMessage: result.userMessage,
+                  hasData: !!result.data,
+                  dataKeys: result.data && typeof result.data === 'object' ? Object.keys(result.data) : [],
+                }),
               });
             } catch (error) {
               console.error(`[DEBUG] Exception placing order for ${trade.instrument}:`, error);
