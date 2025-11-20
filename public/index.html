@@ -481,11 +481,42 @@
             <div id="successSection"></div>
             
             <div class="trades-section" id="tradesSection">
-                <h2>Extracted Trades</h2>
-                <div id="tradesList"></div>
-                <div class="actions">
-                    <button class="btn btn-secondary" onclick="resetUpload()">Start Over</button>
-                    <button class="btn btn-primary" id="confirmBtn" onclick="placeTrades()">Confirm & Place Trades</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">Confirm Trades</h2>
+                    <div id="tradeSelectionInfo" style="font-size: 14px; color: #666;"></div>
+                    <div>
+                        <button class="btn btn-secondary" onclick="selectAllTrades()" style="padding: 8px 16px; margin-right: 10px; width: auto;">Select All</button>
+                        <button class="btn btn-secondary" onclick="deselectAllTrades()" style="padding: 8px 16px; width: auto;">Deselect All</button>
+                    </div>
+                </div>
+                <div id="tradesTableContainer" style="overflow-x: auto;">
+                    <table id="tradesTable" style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden;">
+                        <thead>
+                            <tr style="background: #f8f9ff; border-bottom: 2px solid #e0e4ff;">
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333; width: 40px;">
+                                    <input type="checkbox" id="selectAllCheckbox" onchange="toggleAllTrades(this.checked)">
+                                </th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Instrument</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Matched EPIC</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Direction</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Entry</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Stop</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Target</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Size (£/pt)</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesList">
+                            <!-- Trades will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 15px;">
+                    <button class="btn btn-secondary" onclick="resetUpload()">Cancel</button>
+                    <button class="btn btn-primary" id="confirmBtn" onclick="placeTrades()">
+                        <span style="margin-right: 8px;">✓</span>
+                        <span id="confirmBtnText">Place 0 Orders</span>
+                    </button>
                 </div>
             </div>
             </div>
@@ -718,98 +749,143 @@
             tradesList.innerHTML = '';
             
             if (trades.length === 0) {
-                tradesList.innerHTML = '<p>No trades found in the image.</p>';
+                tradesList.innerHTML = '<tr><td colspan="9" style="padding: 20px; text-align: center;">No trades found in the image.</td></tr>';
                 return;
             }
             
+            // Epic mapping for display
+            const epicDisplayMap = {
+                'IX.D.FTSE.DAILY.IP': 'FTSE 100',
+                'CS.D.XAUUSD.CFD.IP': 'Spot Gold',
+                'CS.D.USCGC.TODAY.IP': 'Spot Gold',
+                'IX.D.SPTRD.DAILY.IP': 'SP500',
+                'IX.D.DAX.DAILY.IP': 'Dax'
+            };
+            
             trades.forEach((trade, index) => {
-                const tradeCard = document.createElement('div');
-                tradeCard.className = 'trade-card';
-                tradeCard.id = `trade-card-${index}`;
-                const direction = trade.direction || 'N/A';
-                const directionClass = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
-                const directionIcon = direction === 'BUY' ? '📈' : '📉';
+                // Initialize selected state
+                if (trade.selected === undefined) {
+                    trade.selected = true;
+                }
                 
-                tradeCard.innerHTML = `
-                    <h3>
-                        <span>${directionIcon} Trade ${index + 1}: ${trade.instrument || 'N/A'}</span>
-                        <span class="trade-status pending" id="status-${index}">Pending</span>
-                    </h3>
-                    <div class="trade-details">
-                        <div class="trade-detail">
-                            <strong>Direction</strong>
-                            <span class="value ${directionClass}">${direction}</span>
-                        </div>
-                        <div class="trade-detail">
-                            <strong>Entry Price</strong>
-                            <span class="value">${trade.entry || 'N/A'}</span>
-                        </div>
-                        <div class="trade-detail">
-                            <strong>Stop Loss</strong>
-                            <span class="value">${trade.stopLevel || 'N/A'}</span>
-                        </div>
-                        <div class="trade-detail">
-                            <strong>Take Profit</strong>
-                            <span class="value">${trade.targetPrice || 'N/A'}</span>
-                        </div>
-                        <div class="trade-detail">
-                            <strong>Order Type</strong>
-                            <span class="value">LIMIT</span>
-                        </div>
-                        <div class="trade-detail">
-                            <strong>Currency</strong>
-                            <span class="value">GBP</span>
-                        </div>
-                    </div>
-                    <div class="size-label">
-                        <strong>Size (£ per point):</strong>
+                const row = document.createElement('tr');
+                row.style.borderBottom = '1px solid #eee';
+                row.id = `trade-row-${index}`;
+                
+                const direction = (trade.direction || 'BUY').toUpperCase();
+                const directionText = direction === 'BUY' ? 'LONG' : 'SHORT';
+                const directionClass = direction === 'BUY' ? 'direction-buy' : 'direction-sell';
+                
+                // Get epic - try to find it or map from instrument
+                let epic = trade.epic || '';
+                if (!epic && trade.instrument) {
+                    const instrumentUpper = trade.instrument.toUpperCase();
+                    const epicMap = {
+                        'FTSE': 'IX.D.FTSE.DAILY.IP',
+                        'FTSE100': 'IX.D.FTSE.DAILY.IP',
+                        'FTSE 100': 'IX.D.FTSE.DAILY.IP',
+                        'GOLD': 'CS.D.USCGC.TODAY.IP',
+                        'SP500': 'IX.D.SPTRD.DAILY.IP',
+                        'S&P 500': 'IX.D.SPTRD.DAILY.IP',
+                        'DAX': 'IX.D.DAX.DAILY.IP'
+                    };
+                    epic = epicMap[instrumentUpper] || '';
+                }
+                
+                const epicDisplay = epic ? `${epic} (${epicDisplayMap[epic] || trade.instrument || 'N/A'})` : trade.instrument || 'N/A';
+                
+                row.innerHTML = `
+                    <td style="padding: 12px;">
+                        <input type="checkbox" 
+                               class="trade-checkbox" 
+                               data-index="${index}"
+                               ${trade.selected ? 'checked' : ''}
+                               onchange="toggleTradeSelection(${index}, this.checked)">
+                    </td>
+                    <td style="padding: 12px; font-weight: 500;">${trade.instrument || 'N/A'}</td>
+                    <td style="padding: 12px; font-size: 13px; color: #666;">
+                        <div style="font-weight: 500; color: #333;">${epic || 'N/A'}</div>
+                        <div style="font-size: 12px; color: #999;">${epicDisplayMap[epic] || trade.instrument || 'N/A'}</div>
+                    </td>
+                    <td style="padding: 12px;">
+                        <span class="direction-pill ${directionClass}" style="
+                            display: inline-block;
+                            padding: 4px 12px;
+                            border-radius: 12px;
+                            font-weight: 600;
+                            font-size: 12px;
+                            ${direction === 'BUY' ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}
+                        ">${directionText}</span>
+                    </td>
+                    <td style="padding: 12px; font-weight: 500;">${trade.entry || 'N/A'}</td>
+                    <td style="padding: 12px; font-weight: 500;">${trade.stopLevel || 'N/A'}</td>
+                    <td style="padding: 12px; font-weight: 500;">${trade.targetPrice || 'N/A'}</td>
+                    <td style="padding: 12px;">
                         <input type="number" 
                                class="size-input" 
                                id="size-${index}" 
                                value="${trade.size || '0.01'}" 
                                step="0.01" 
                                min="0.01"
+                               style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
                                onchange="updateTradeSize(${index}, this.value)">
-                    </div>
-                    <div id="result-${index}" style="margin-top: 15px;"></div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">Min: £${trade.size || '0.01'}</div>
+                    </td>
+                    <td style="padding: 12px; color: #666;">${trade.confidence || '50'}%</td>
                 `;
-                tradesList.appendChild(tradeCard);
+                tradesList.appendChild(row);
             });
             
+            // Update selection info and button text
+            updateTradeSelectionInfo();
             tradesSection.classList.add('active');
         }
         
+        function toggleTradeSelection(index, selected) {
+            if (parsedTrades[index]) {
+                parsedTrades[index].selected = selected;
+                updateTradeSelectionInfo();
+            }
+        }
+        
+        function selectAllTrades() {
+            parsedTrades.forEach(trade => trade.selected = true);
+            document.querySelectorAll('.trade-checkbox').forEach(cb => cb.checked = true);
+            document.getElementById('selectAllCheckbox').checked = true;
+            updateTradeSelectionInfo();
+        }
+        
+        function deselectAllTrades() {
+            parsedTrades.forEach(trade => trade.selected = false);
+            document.querySelectorAll('.trade-checkbox').forEach(cb => cb.checked = false);
+            document.getElementById('selectAllCheckbox').checked = false;
+            updateTradeSelectionInfo();
+        }
+        
+        function toggleAllTrades(checked) {
+            if (checked) {
+                selectAllTrades();
+            } else {
+                deselectAllTrades();
+            }
+        }
+        
+        function updateTradeSelectionInfo() {
+            const selectedCount = parsedTrades.filter(t => t.selected !== false).length;
+            const totalCount = parsedTrades.length;
+            const matchedCount = parsedTrades.filter(t => t.epic || t.instrument).length;
+            
+            document.getElementById('tradeSelectionInfo').textContent = 
+                `${selectedCount} of ${totalCount} selected, ${matchedCount} matched`;
+            
+            document.getElementById('confirmBtnText').textContent = 
+                `Place ${selectedCount} Order${selectedCount !== 1 ? 's' : ''}`;
+        }
+        
+        // Legacy function - kept for compatibility but may not be used with new table layout
         function updateTradeStatus(index, success, message, dealReference) {
-            const statusEl = document.getElementById(`status-${index}`);
-            const cardEl = document.getElementById(`trade-card-${index}`);
-            const resultEl = document.getElementById(`result-${index}`);
-            
-            if (statusEl) {
-                statusEl.className = `trade-status ${success ? 'success' : 'error'}`;
-                statusEl.textContent = success ? 'Success' : 'Failed';
-            }
-            
-            if (cardEl) {
-                cardEl.classList.remove('success', 'error');
-                cardEl.classList.add(success ? 'success' : 'error');
-            }
-            
-            if (resultEl) {
-                const icon = success ? '✅' : '❌';
-                const bgColor = success ? '#efe' : '#fee';
-                const borderColor = success ? '#cfc' : '#fcc';
-                const textColor = success ? '#3c3' : '#c33';
-                
-                // Format message with line breaks for debug info
-                const formattedMessage = message.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
-                
-                resultEl.innerHTML = `
-                    <div style="background: ${bgColor}; border: 2px solid ${borderColor}; color: ${textColor}; padding: 10px; border-radius: 6px; font-size: 14px; white-space: pre-wrap; word-wrap: break-word;">
-                        ${icon} <strong>${formattedMessage}</strong>
-                        ${dealReference ? `<br><small>Deal Reference: ${dealReference}</small>` : ''}
-                    </div>
-                `;
-            }
+            // This function is kept for backwards compatibility
+            // Status updates are now handled inline in placeTrades()
         }
         
         function updateTradeSize(index, value) {
@@ -819,7 +895,13 @@
         }
         
         async function placeTrades() {
-            if (parsedTrades.length === 0) return;
+            // Filter to only selected trades
+            const selectedTrades = parsedTrades.filter(t => t.selected !== false);
+            
+            if (selectedTrades.length === 0) {
+                alert('Please select at least one trade to place');
+                return;
+            }
             
             if (!isAuthenticated) {
                 errorSection.innerHTML = '<div class="error">Please login first before placing trades.</div>';
@@ -847,7 +929,7 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ trades: parsedTrades })
+                    body: JSON.stringify({ trades: selectedTrades })
                 });
                 
                 const data = await response.json();
@@ -856,25 +938,35 @@
                     throw new Error(data.error || 'Failed to place trades');
                 }
                 
-                // Update each trade card with its result
+                // Update each trade row with its result
                 if (data.results && Array.isArray(data.results)) {
-                    data.results.forEach((result, index) => {
-                        let message = result.message || (result.success ? 'Order placed successfully' : 'Order failed');
-                        
-                        // Add debug info if available
-                        if (result.debug) {
-                            message += `\n\nDebug: ${result.debug}`;
+                    let selectedIndex = 0;
+                    parsedTrades.forEach((trade, index) => {
+                        if (trade.selected !== false && data.results[selectedIndex]) {
+                            const result = data.results[selectedIndex];
+                            const row = document.getElementById(`trade-row-${index}`);
+                            
+                            if (row) {
+                                // Add status column if it doesn't exist
+                                let statusCell = row.querySelector('.status-cell');
+                                if (!statusCell) {
+                                    statusCell = document.createElement('td');
+                                    statusCell.className = 'status-cell';
+                                    row.appendChild(statusCell);
+                                }
+                                
+                                const icon = result.success ? '✓' : '✗';
+                                const color = result.success ? '#28a745' : '#dc3545';
+                                statusCell.innerHTML = `<span style="color: ${color}; font-weight: 600;">${icon} ${result.success ? 'Placed' : 'Failed'}</span>`;
+                                statusCell.style.padding = '12px';
+                                
+                                if (result.dealReference) {
+                                    statusCell.innerHTML += `<div style="font-size: 11px; color: #666; margin-top: 4px;">Ref: ${result.dealReference}</div>`;
+                                }
+                            }
+                            
+                            selectedIndex++;
                         }
-                        if (result.error) {
-                            message += `\n\nError: ${result.error}`;
-                        }
-                        
-                        updateTradeStatus(
-                            index,
-                            result.success,
-                            message,
-                            result.dealReference
-                        );
                     });
                 }
                 
