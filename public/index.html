@@ -851,6 +851,11 @@
             }
         }
         
+        // Load settings on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+        });
+        
         function getDefaultSize() {
             return parseFloat(localStorage.getItem('defaultPositionSize') || '0.3');
         }
@@ -899,6 +904,15 @@
                     sizeInput.value = defaultSize;
                 }
             });
+        }
+        
+        function updateDefaultSize() {
+            // Just update the localStorage when default size changes
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            if (defaultSizeInput) {
+                const defaultSize = parseFloat(defaultSizeInput.value || '0.3');
+                localStorage.setItem('defaultPositionSize', defaultSize.toString());
+            }
         }
         
         function displayTrades(trades) {
