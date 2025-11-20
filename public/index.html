@@ -1043,7 +1043,7 @@
                         }
                         
                         // Fix expiry - if it's a date string, convert to DFB for daily instruments
-                        if (args.expiry && args.expiry.includes('T') || args.expiry.includes('-')) {
+                        if (args.expiry && (args.expiry.includes('T') || args.expiry.includes('-'))) {
                             // It's a date, but for daily instruments we should use DFB
                             if (args.epic && args.epic.includes('.DAILY.')) {
                                 args.expiry = 'DFB';
@@ -1061,6 +1061,50 @@
                         // Ensure orderType is set for orders
                         if (jsonRequest.params.name === 'ig_place_order' && !args.orderType) {
                             args.orderType = args.level ? 'LIMIT' : 'MARKET';
+                        }
+                        
+                        // Fix stop/limit levels for BUY vs SELL orders
+                        if (jsonRequest.params.name === 'ig_place_order' && args.direction && args.level) {
+                            const entry = args.level;
+                            const direction = args.direction.toUpperCase();
+                            
+                            if (direction === 'BUY') {
+                                // For BUY: stop below entry, limit above entry
+                                if (args.stopLevel && args.stopLevel > entry) {
+                                    // Stop is above entry - swap with limit if limit exists
+                                    if (args.limitLevel && args.limitLevel < entry) {
+                                        const temp = args.stopLevel;
+                                        args.stopLevel = args.limitLevel;
+                                        args.limitLevel = temp;
+                                    } else {
+                                        // Just swap stop and limit
+                                        args.limitLevel = args.stopLevel;
+                                        args.stopLevel = entry - Math.abs(entry - args.stopLevel);
+                                    }
+                                }
+                                if (args.limitLevel && args.limitLevel < entry) {
+                                    // Limit is below entry - wrong for BUY
+                                    args.limitLevel = entry + Math.abs(entry - args.limitLevel);
+                                }
+                            } else if (direction === 'SELL') {
+                                // For SELL: stop above entry, limit below entry
+                                if (args.stopLevel && args.stopLevel < entry) {
+                                    // Stop is below entry - swap with limit if limit exists
+                                    if (args.limitLevel && args.limitLevel > entry) {
+                                        const temp = args.stopLevel;
+                                        args.stopLevel = args.limitLevel;
+                                        args.limitLevel = temp;
+                                    } else {
+                                        // Just swap stop and limit
+                                        args.limitLevel = args.stopLevel;
+                                        args.stopLevel = entry + Math.abs(entry - args.stopLevel);
+                                    }
+                                }
+                                if (args.limitLevel && args.limitLevel > entry) {
+                                    // Limit is above entry - wrong for SELL
+                                    args.limitLevel = entry - Math.abs(entry - args.limitLevel);
+                                }
+                            }
                         }
                     }
                     

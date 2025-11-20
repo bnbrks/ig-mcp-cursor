@@ -1894,8 +1894,11 @@ IMPORTANT RULES:
 5. For daily spread bets, always use expiry: "DFB" (not a date)
 6. For limit orders, use orderType: "LIMIT" and include the level (entry price)
 7. Stop levels and limit levels are absolute prices, not distances
-8. Always use currencyCode: "GBP" for UK instruments
-9. Size is in £ per point for spread betting
+8. CRITICAL: For BUY orders: stopLevel must be BELOW entry, limitLevel must be ABOVE entry
+9. CRITICAL: For SELL orders: stopLevel must be ABOVE entry, limitLevel must be BELOW entry
+10. Always use currencyCode: "GBP" for UK instruments
+11. Size is in £ per point for spread betting
+12. LIMIT orders become "working orders" and won't show in open positions until filled - check working orders instead
 
 Return ONLY a valid JSON-RPC 2.0 request object. Format:
 {
