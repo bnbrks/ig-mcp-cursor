@@ -1118,52 +1118,71 @@
                 
                 const data = await response.json();
                 
+                // Log the full response for debugging
+                console.log('[CLIENT] Full response from server:', data);
+                console.log('[CLIENT] Results array:', data.results);
+                
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to place trades');
                 }
                 
                 // Update each trade row with its result
                 if (data.results && Array.isArray(data.results)) {
+                    console.log('[CLIENT] Processing', data.results.length, 'results');
                     let selectedIndex = 0;
                     parsedTrades.forEach((trade, index) => {
                         if (trade.selected !== false && data.results[selectedIndex]) {
                             const result = data.results[selectedIndex];
                             const statusCell = document.getElementById(`status-cell-${index}`);
                             
+                            // Log what we received for this trade
+                            console.log(`[CLIENT] Trade ${index} result:`, result);
+                            console.log(`[CLIENT] Trade ${index} - Has debug:`, !!result.debug);
+                            console.log(`[CLIENT] Trade ${index} - Has error:`, !!result.error);
+                            console.log(`[CLIENT] Trade ${index} - Has data:`, !!result.data);
+                            console.log(`[CLIENT] Trade ${index} - Has rawResult:`, !!result.rawResult);
+                            
                             if (statusCell) {
-                                // Always show full debug info
-                                let fullDebugInfo = '';
+                                // Always show full debug info - even if empty, show what we have
+                                let fullDebugInfo = '<div style="margin-top: 8px; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 10px; max-height: 200px; overflow-y: auto;">';
+                                fullDebugInfo += '<strong>Debug Info:</strong><br>';
+                                
+                                // Show raw result first
+                                if (result.rawResult) {
+                                    try {
+                                        const rawObj = typeof result.rawResult === 'string' ? JSON.parse(result.rawResult) : result.rawResult;
+                                        fullDebugInfo += '<div style="margin-bottom: 8px;"><strong>Raw Result:</strong><br><pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0; font-size: 9px;">' + JSON.stringify(rawObj, null, 2) + '</pre></div>';
+                                    } catch (e) {
+                                        fullDebugInfo += '<div style="margin-bottom: 8px;">Raw Result: ' + String(result.rawResult) + '</div>';
+                                    }
+                                }
                                 
                                 // Build comprehensive debug info
                                 if (result.debug) {
                                     try {
                                         const debugObj = typeof result.debug === 'string' ? JSON.parse(result.debug) : result.debug;
                                         if (typeof debugObj === 'object' && debugObj !== null) {
-                                            fullDebugInfo += '<div style="margin-top: 8px; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 10px; max-height: 150px; overflow-y: auto;">';
-                                            fullDebugInfo += '<strong>Debug Info:</strong><br>';
-                                            fullDebugInfo += '<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0;">' + JSON.stringify(debugObj, null, 2) + '</pre>';
-                                            fullDebugInfo += '</div>';
+                                            fullDebugInfo += '<div style="margin-bottom: 8px;"><strong>Debug Object:</strong><br><pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0; font-size: 9px;">' + JSON.stringify(debugObj, null, 2) + '</pre></div>';
                                         } else {
-                                            fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #666;">Debug: ' + String(result.debug) + '</div>';
+                                            fullDebugInfo += '<div style="margin-bottom: 8px;">Debug: ' + String(result.debug) + '</div>';
                                         }
                                     } catch (e) {
-                                        fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #666;">Debug: ' + String(result.debug) + '</div>';
+                                        fullDebugInfo += '<div style="margin-bottom: 8px;">Debug (raw): ' + String(result.debug) + '</div>';
                                     }
+                                } else {
+                                    fullDebugInfo += '<div style="margin-bottom: 8px; color: #999; font-style: italic;">No debug info provided</div>';
                                 }
                                 
                                 if (result.error) {
                                     try {
                                         const errorObj = typeof result.error === 'string' ? JSON.parse(result.error) : result.error;
                                         if (typeof errorObj === 'object' && errorObj !== null) {
-                                            fullDebugInfo += '<div style="margin-top: 8px; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 10px;">';
-                                            fullDebugInfo += '<strong>Error Details:</strong><br>';
-                                            fullDebugInfo += '<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0;">' + JSON.stringify(errorObj, null, 2) + '</pre>';
-                                            fullDebugInfo += '</div>';
+                                            fullDebugInfo += '<div style="margin-bottom: 8px; padding: 6px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;"><strong>Error Details:</strong><br><pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0; font-size: 9px;">' + JSON.stringify(errorObj, null, 2) + '</pre></div>';
                                         } else {
-                                            fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #dc3545;">Error: ' + String(result.error) + '</div>';
+                                            fullDebugInfo += '<div style="margin-bottom: 8px; color: #dc3545;">Error: ' + String(result.error) + '</div>';
                                         }
                                     } catch (e) {
-                                        fullDebugInfo += '<div style="margin-top: 8px; font-size: 10px; color: #dc3545;">Error: ' + String(result.error) + '</div>';
+                                        fullDebugInfo += '<div style="margin-bottom: 8px; color: #dc3545;">Error (raw): ' + String(result.error) + '</div>';
                                     }
                                 }
                                 
@@ -1172,15 +1191,19 @@
                                     try {
                                         const dataObj = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
                                         if (typeof dataObj === 'object' && dataObj !== null) {
-                                            fullDebugInfo += '<div style="margin-top: 8px; padding: 8px; background: #e7f3ff; border: 1px solid #0d6efd; border-radius: 4px; font-size: 10px;">';
-                                            fullDebugInfo += '<strong>Response Data:</strong><br>';
-                                            fullDebugInfo += '<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0;">' + JSON.stringify(dataObj, null, 2) + '</pre>';
-                                            fullDebugInfo += '</div>';
+                                            fullDebugInfo += '<div style="margin-bottom: 8px; padding: 6px; background: #e7f3ff; border: 1px solid #0d6efd; border-radius: 4px;"><strong>Response Data:</strong><br><pre style="white-space: pre-wrap; word-wrap: break-word; margin: 4px 0; font-size: 9px;">' + JSON.stringify(dataObj, null, 2) + '</pre></div>';
+                                        } else {
+                                            fullDebugInfo += '<div style="margin-bottom: 8px;">Data: ' + String(result.data) + '</div>';
                                         }
                                     } catch (e) {
-                                        // Ignore parsing errors
+                                        fullDebugInfo += '<div style="margin-bottom: 8px;">Data (raw): ' + String(result.data) + '</div>';
                                     }
+                                } else {
+                                    fullDebugInfo += '<div style="margin-bottom: 8px; color: #999; font-style: italic;">No response data provided</div>';
                                 }
+                                
+                                // Close the debug info container
+                                fullDebugInfo += '</div>';
                                 
                                 if (result.success) {
                                     // Check if we have a dealReference or dealId to confirm it was actually placed
