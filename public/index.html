@@ -426,6 +426,7 @@
         <nav class="main-nav">
             <button class="nav-btn active" onclick="showPage('trade-parser')">Trade Parser</button>
             <button class="nav-btn" onclick="showPage('api-test')">API Tester</button>
+            <button class="nav-btn" onclick="showPage('settings')">Settings</button>
         </nav>
         
         <div class="content">
@@ -484,8 +485,19 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="margin: 0;">Confirm Trades</h2>
                     <div id="tradeSelectionInfo" style="font-size: 14px; color: #666;"></div>
-                    <div>
-                        <button class="btn btn-secondary" onclick="selectAllTrades()" style="padding: 8px 16px; margin-right: 10px; width: auto;">Select All</button>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <label style="font-size: 14px; font-weight: 500;">Default Size (£/pt):</label>
+                            <input type="number" 
+                                   id="defaultSizeInput" 
+                                   value="0.3" 
+                                   step="0.1" 
+                                   min="0.01"
+                                   style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
+                                   onchange="updateDefaultSize()">
+                            <button class="btn btn-secondary" onclick="applyDefaultSize()" style="padding: 6px 12px; width: auto; font-size: 12px;">Apply to All</button>
+                        </div>
+                        <button class="btn btn-secondary" onclick="selectAllTrades()" style="padding: 8px 16px; width: auto;">Select All</button>
                         <button class="btn btn-secondary" onclick="deselectAllTrades()" style="padding: 8px 16px; width: auto;">Deselect All</button>
                     </div>
                 </div>
@@ -504,6 +516,7 @@
                                 <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Target</th>
                                 <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Size (£/pt)</th>
                                 <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Confidence</th>
+                                <th style="padding: 12px; text-align: left; font-weight: 600; color: #333;">Status</th>
                             </tr>
                         </thead>
                         <tbody id="tradesList">
@@ -519,6 +532,35 @@
                     </button>
                 </div>
             </div>
+            </div>
+            
+            <!-- Settings Page -->
+            <div class="page" id="settings-page">
+                <div class="api-test-section">
+                    <h2>⚙️ Settings</h2>
+                    <p style="margin-bottom: 20px; color: #666;">Configure default settings for trade parsing and placement</p>
+                    
+                    <div style="background: #f8f9ff; border: 2px solid #e0e4ff; border-radius: 12px; padding: 30px; margin-bottom: 20px;">
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; font-size: 16px;">Default Position Size (£ per point):</label>
+                            <input type="number" 
+                                   id="settingsDefaultSize" 
+                                   value="0.3" 
+                                   step="0.1" 
+                                   min="0.01"
+                                   style="width: 150px; padding: 10px; border: 2px solid #e0e4ff; border-radius: 6px; font-size: 16px;"
+                                   onchange="saveSettings()">
+                            <p style="margin-top: 8px; font-size: 14px; color: #666;">
+                                This default size will be applied to all new trades when parsing screenshots.
+                            </p>
+                        </div>
+                        
+                        <button class="btn btn-primary" onclick="saveSettings()" style="width: auto;">
+                            Save Settings
+                        </button>
+                        <div id="settingsSaveStatus" style="margin-top: 15px;"></div>
+                    </div>
+                </div>
             </div>
             
             <!-- API Tester Page -->
@@ -744,12 +786,69 @@
             }
         }
         
+        function getDefaultSize() {
+            return parseFloat(localStorage.getItem('defaultPositionSize') || '0.3');
+        }
+        
+        function loadSettings() {
+            const defaultSize = getDefaultSize();
+            const settingsInput = document.getElementById('settingsDefaultSize');
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            
+            if (settingsInput) {
+                settingsInput.value = defaultSize;
+            }
+            if (defaultSizeInput) {
+                defaultSizeInput.value = defaultSize;
+            }
+        }
+        
+        function saveSettings() {
+            const settingsInput = document.getElementById('settingsDefaultSize');
+            const defaultSize = parseFloat(settingsInput?.value || '0.3');
+            
+            localStorage.setItem('defaultPositionSize', defaultSize.toString());
+            
+            const statusEl = document.getElementById('settingsSaveStatus');
+            if (statusEl) {
+                statusEl.innerHTML = `<div style="padding: 10px; background: #d4edda; color: #155724; border-radius: 6px;">✓ Settings saved successfully!</div>`;
+                setTimeout(() => {
+                    statusEl.innerHTML = '';
+                }, 2000);
+            }
+            
+            // Update default size input on trade parser page
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            if (defaultSizeInput) {
+                defaultSizeInput.value = defaultSize;
+            }
+        }
+        
+        function applyDefaultSize() {
+            const defaultSize = parseFloat(document.getElementById('defaultSizeInput')?.value || '0.3');
+            
+            parsedTrades.forEach((trade, index) => {
+                trade.size = defaultSize;
+                const sizeInput = document.getElementById(`size-${index}`);
+                if (sizeInput) {
+                    sizeInput.value = defaultSize;
+                }
+            });
+        }
+        
         function displayTrades(trades) {
             const tradesList = document.getElementById('tradesList');
             tradesList.innerHTML = '';
             
+            // Load default size from settings
+            const defaultSize = getDefaultSize();
+            const defaultSizeInput = document.getElementById('defaultSizeInput');
+            if (defaultSizeInput) {
+                defaultSizeInput.value = defaultSize;
+            }
+            
             if (trades.length === 0) {
-                tradesList.innerHTML = '<tr><td colspan="9" style="padding: 20px; text-align: center;">No trades found in the image.</td></tr>';
+                tradesList.innerHTML = '<tr><td colspan="10" style="padding: 20px; text-align: center;">No trades found in the image.</td></tr>';
                 return;
             }
             
@@ -766,6 +865,11 @@
                 // Initialize selected state
                 if (trade.selected === undefined) {
                     trade.selected = true;
+                }
+                
+                // Apply default size if not set
+                if (!trade.size || trade.size === 0.01) {
+                    trade.size = defaultSize;
                 }
                 
                 const row = document.createElement('tr');
@@ -824,14 +928,15 @@
                         <input type="number" 
                                class="size-input" 
                                id="size-${index}" 
-                               value="${trade.size || '0.01'}" 
+                               value="${trade.size || defaultSize}" 
                                step="0.01" 
                                min="0.01"
                                style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 4px;"
                                onchange="updateTradeSize(${index}, this.value)">
-                        <div style="font-size: 11px; color: #999; margin-top: 2px;">Min: £${trade.size || '0.01'}</div>
+                        <div style="font-size: 11px; color: #999; margin-top: 2px;">Min: £${trade.size || defaultSize}</div>
                     </td>
                     <td style="padding: 12px; color: #666;">${trade.confidence || '50'}%</td>
+                    <td class="status-cell" id="status-cell-${index}" style="padding: 12px; color: #666;">-</td>
                 `;
                 tradesList.appendChild(row);
             });
@@ -944,28 +1049,64 @@
                     parsedTrades.forEach((trade, index) => {
                         if (trade.selected !== false && data.results[selectedIndex]) {
                             const result = data.results[selectedIndex];
-                            const row = document.getElementById(`trade-row-${index}`);
+                            const statusCell = document.getElementById(`status-cell-${index}`);
                             
-                            if (row) {
-                                // Add status column if it doesn't exist
-                                let statusCell = row.querySelector('.status-cell');
-                                if (!statusCell) {
-                                    statusCell = document.createElement('td');
-                                    statusCell.className = 'status-cell';
-                                    row.appendChild(statusCell);
-                                }
-                                
-                                const icon = result.success ? '✓' : '✗';
-                                const color = result.success ? '#28a745' : '#dc3545';
-                                statusCell.innerHTML = `<span style="color: ${color}; font-weight: 600;">${icon} ${result.success ? 'Placed' : 'Failed'}</span>`;
-                                statusCell.style.padding = '12px';
-                                
-                                if (result.dealReference) {
-                                    statusCell.innerHTML += `<div style="font-size: 11px; color: #666; margin-top: 4px;">Ref: ${result.dealReference}</div>`;
+                            if (statusCell) {
+                                if (result.success) {
+                                    statusCell.innerHTML = `
+                                        <div style="color: #28a745; font-weight: 600;">✓ Placed</div>
+                                        ${result.dealReference ? `<div style="font-size: 11px; color: #666; margin-top: 4px;">Ref: ${result.dealReference}</div>` : ''}
+                                    `;
+                                    statusCell.style.color = '#28a745';
+                                } else {
+                                    // Show error with debug summary
+                                    let errorMessage = result.message || 'Order failed';
+                                    let debugInfo = '';
+                                    
+                                    if (result.error) {
+                                        try {
+                                            const errorObj = typeof result.error === 'string' ? JSON.parse(result.error) : result.error;
+                                            if (errorObj.errorCode) {
+                                                debugInfo += `Error: ${errorObj.errorCode}<br>`;
+                                            }
+                                        } catch (e) {
+                                            debugInfo += `Error: ${result.error}<br>`;
+                                        }
+                                    }
+                                    
+                                    if (result.debug) {
+                                        try {
+                                            const debugObj = typeof result.debug === 'string' ? JSON.parse(result.debug) : result.debug;
+                                            if (debugObj.response && debugObj.response.errorCode) {
+                                                debugInfo += `Code: ${debugObj.response.errorCode}<br>`;
+                                            }
+                                            if (debugObj.status) {
+                                                debugInfo += `Status: ${debugObj.status}`;
+                                            }
+                                        } catch (e) {
+                                            debugInfo += result.debug;
+                                        }
+                                    }
+                                    
+                                    statusCell.innerHTML = `
+                                        <div style="color: #dc3545; font-weight: 600;">✗ Failed</div>
+                                        <div style="font-size: 11px; color: #dc3545; margin-top: 4px; max-width: 200px;">
+                                            ${errorMessage}
+                                            ${debugInfo ? `<br><br><strong>Debug:</strong><br>${debugInfo}` : ''}
+                                        </div>
+                                    `;
+                                    statusCell.style.color = '#dc3545';
                                 }
                             }
                             
                             selectedIndex++;
+                        } else if (trade.selected === false) {
+                            // Trade was not selected, clear status
+                            const statusCell = document.getElementById(`status-cell-${index}`);
+                            if (statusCell) {
+                                statusCell.innerHTML = '-';
+                                statusCell.style.color = '#666';
+                            }
                         }
                     });
                 }
